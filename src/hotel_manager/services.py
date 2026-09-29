@@ -15,3 +15,6 @@ def create_hotel(db: Session, payload: HotelCreate) -> Hotel:
 
 def list_hotels(db: Session) -> list[Hotel]:
     return list(db.scalars(select(Hotel).order_by(Hotel.id)))
+
+def get_hotel(db: Session, hotel_id: int):
+    return db.scalar(select(Hotel).where(Hotel.id == hotel_id))

@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from hotel_manager.database import Base, engine, get_db
 from hotel_manager import models  # noqa: F401
 from hotel_manager.schemas import HotelCreate, HotelRead
-from hotel_manager.services import create_hotel, list_hotels
+from hotel_manager.services import create_hotel, list_hotels, get_hotel
 
 
 @asynccontextmanager
@@ -31,3 +31,13 @@ def create_hotel_endpoint(payload: HotelCreate, db: Session = Depends(get_db)):
 @app.get("/hotels", response_model=list[HotelRead], tags=["hotels"])
 def list_hotels_endpoint(db: Session = Depends(get_db)):
     return list_hotels(db)
+
+
+@app.get("/hotels/{hotel_id}", response_model=HotelRead, tags=["hotels"])
+def get_hotel_endpoint(hotel_id: int, db: Session = Depends(get_db)):
+    hotel = get_hotel(db, hotel_id)
+
+    if hotel is None:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    return hotel
