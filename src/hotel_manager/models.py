@@ -1,9 +1,9 @@
 from enum import Enum as PyEnum
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from hotel_manager.database import Base
-
+from decimal import Decimal
 
 class UserRole(str, PyEnum):
     FRONT_DESK = "FRONT_DESK"
@@ -63,10 +63,37 @@ class Room(Base):
     __tablename__ = "rooms"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    hotel_id: Mapped[int] = mapped_column(ForeignKey("hotels.id"), nullable=False)
-    room_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(50), default=RoomStatus.AVAILABLE.value)
 
+    hotel_id: Mapped[int] = mapped_column(
+        ForeignKey("hotels.id"),
+        nullable=False,
+    )
+
+    room_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        default=RoomStatus.AVAILABLE.value,
+        nullable=False,
+    )
+
+    floor: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    nightly_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+    )
+
+    room_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
 
 class ElectricityMeter(Base):
     __tablename__ = "electricity_meters"

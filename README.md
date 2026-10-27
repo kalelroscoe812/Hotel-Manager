@@ -214,7 +214,6 @@ PYTHONPATH=src python -m pytest
 
 Expected result:
 ```text
-5 passed in 1.5s
 - tests/test_api.py (Hotel creation & listing)
 - tests/test_services.py (Hotel ORM services)
 - tests/test_deliverables_oct27.py (Hotel, User, Room, Meter & Auth APIs)
@@ -272,3 +271,102 @@ Pre-configured launch and task profiles are included in `.vscode/`:
 ├── pyproject.toml
 └── vite.config.ts
 ```
+
+## Room Inventory API
+
+The room API supports creation, retrieval, updates, deletion, and combined inventory filters.
+
+### Optional inventory fields
+
+- `floor`: Integer; negative values can represent basement floors.
+- `nightly_price`: Nonnegative decimal amount with up to eight integer digits and two decimal places.
+- `room_type`: Nonempty string of up to 50 characters, trimmed and stored in lowercase.
+
+Existing room creation requests remain valid without these fields. During updates, omitted fields retain their values. Explicit `null` clears optional inventory fields; room number and status cannot be set to `null`.
+
+Prices are returned as JSON strings to preserve decimal representation.
+
+### Listing and filtering
+
+`GET /rooms` accepts:
+
+| Parameter | Description |
+|---|---|
+| `hotel_id` | Filter by hotel |
+| `status` | Exact room status |
+| `floor` | Exact floor |
+| `room_type` | Room type, trimmed and normalized to lowercase |
+| `min_price` | Inclusive minimum nightly price |
+| `max_price` | Inclusive maximum nightly price |
+| `page` | Page number, starting at 1 |
+| `page_size` | Results per page, from 1 to 100; default 50 |
+
+Filters combine before pagination. Results are ordered by room number, then room ID. No matches returns an empty array. Rooms without a nightly price are excluded when a price filter is supplied.
+
+Example:
+
+```text
+GET /rooms?hotel_id=1&floor=2&room_type=double&min_price=100&max_price=200
+```
+
+Invalid filter values or a minimum price greater than the maximum return 422.
+
+### Room deletion
+
+`DELETE /rooms/{room_id}` returns:
+
+- 204 when deletion succeeds.
+- 404 when the room does not exist.
+- 409 when an electricity meter is associated with the room.
+
+Deleting a room updates the hotel's room count. Removing an associated meter is not exposed by this contribution.
+
+### Electricity meters
+
+- `POST /meters` creates or updates the current meter record for a room.
+- `GET /rooms/{room_id}/meter` retrieves that record.
+- Missing rooms or meter records return 404.
+
+Posting another reading updates the existing record. Historical readings and batch ingestion are not implemented.
+
+## Database Migrations
+
+Alembic uses the application's `DATABASE_URL`.
+
+For a new local SQLite database, run migrations before starting the application:
+
+```bash
+uv sync
+export DATABASE_URL="sqlite+pysqlite:///./hotel_manager_dev.db"
+uv run alembic upgrade head
+uv run fastapi dev src/hotel_manager/main.py
+```
+
+Open `http://127.0.0.1:8000/docs` to explore the API.
+
+Migration `0001` creates the original tables. Migration `0002` adds nullable floor, nightly price, and room type columns.
+
+For an existing database without Alembic tracking, back it up and verify that its schema matches migration `0001` before stamping that revision and applying `0002`. Do not run the table-creation baseline against populated tables or stamp an unverified schema.
+
+Application startup uses `create_all()`, which does not add columns to existing tables. Schema changes require migrations.
+
+## Room and Meter Validation
+
+Run the focused tests:
+
+```bash
+uv run pytest tests/test_room_inventory.py -q
+```
+
+Run the complete suite:
+
+```bash
+uv run pytest -q
+```
+
+At the time of this contribution, the focused suite passes 37 tests. The complete suite reports 40 passed and two existing failures in `tests/test_deliverables_oct27.py`:
+
+- Hotel update: `PUT /hotels/{hotel_id}` returns 405.
+- User creation/auth flow: `POST /users` returns 404.
+
+SQLite migration checks verified fresh database creation, agreement with the models, and preservation of existing hotel and room records during upgrade. PostgreSQL migration execution has not yet been verified.

@@ -8,6 +8,8 @@ from hotel_manager import models  # noqa: F401
 from hotel_manager.schemas import HotelCreate, HotelRead
 from hotel_manager.services import create_hotel, list_hotels, get_hotel
 
+from hotel_manager.rooms import router as rooms_router
+from hotel_manager.meters import router as meters_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -16,6 +18,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Hotel Manager API", version="0.1.0", lifespan=lifespan)
+app.include_router(rooms_router)
+app.include_router(meters_router)
 
 
 @app.get("/", tags=["system"])
