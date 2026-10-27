@@ -1,3 +1,4 @@
+from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -136,15 +137,41 @@ def list_rooms(
     page_size: int = 50,
     hotel_id: int | None = None,
     status: str | None = None,
+    floor: int | None = None,
+    room_type: str | None = None,
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
 ) -> list[Room]:
-    stmt = select(Room).order_by(Room.room_number)
+    statement = select(Room)
+
     if hotel_id is not None:
-        stmt = stmt.where(Room.hotel_id == hotel_id)
+        statement = statement.where(Room.hotel_id == hotel_id)
+
     if status is not None:
-        stmt = stmt.where(Room.status == status)
+        statement = statement.where(Room.status == status)
+
+    if floor is not None:
+        statement = statement.where(Room.floor == floor)
+
+    if room_type is not None:
+        statement = statement.where(Room.room_type == room_type)
+
+    if min_price is not None:
+        statement = statement.where(Room.nightly_price >= min_price)
+
+    if max_price is not None:
+        statement = statement.where(Room.nightly_price <= max_price)
+
     offset = (page - 1) * page_size
-    stmt = stmt.offset(offset).limit(page_size)
-    return list(db.scalars(stmt))
+
+    statement = (
+        statement
+        .order_by(Room.room_number, Room.id)
+        .offset(offset)
+        .limit(page_size)
+    )
+
+    return list(db.scalars(statement))
 
 
 def get_room(db: Session, room_id: int) -> Room | None:

@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from decimal import Decimal
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------- Hotel Schemas ----------------
 class HotelCreate(BaseModel):
@@ -60,15 +61,49 @@ class UserBindRequest(BaseModel):
 
 
 # ---------------- Room Schemas ----------------
-class RoomCreate(BaseModel):
+class RoomInventoryFields(BaseModel):
+    floor: int | None = None
+
+    nightly_price: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=10,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+
+    room_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+    )
+
+    @field_validator("room_type", mode="before")
+    @classmethod
+    def normalize_room_type(cls, value):
+        if isinstance(value, str):
+            return value.strip().lower()
+
+        return value
+
+
+class RoomCreate(RoomInventoryFields):
     hotel_id: int
     room_number: int
     status: str = Field(default="available")
 
 
-class RoomUpdate(BaseModel):
+class RoomUpdate(RoomInventoryFields):
     room_number: int | None = None
     status: str | None = None
+
+    @field_validator("room_number", "status")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null")
+
+        return value
 
 
 class RoomRead(RoomCreate):
