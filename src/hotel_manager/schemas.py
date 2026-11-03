@@ -123,3 +123,29 @@ class ElectricityMeterRead(ElectricityMeterCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+
+
+# ---------------- Maintenance Ticket Schemas ----------------
+
+from typing import Literal
+
+TicketPriority = Literal["Low", "Medium", "High"]
+TicketStatus = Literal["Open", "In Progress", "Resolved"]
+
+
+class MaintenanceTicketCreate(BaseModel):
+    room_id: int = Field(gt=0)
+    description: str = Field(min_length=1, max_length=500)
+    priority: TicketPriority = "Medium"
+
+
+class MaintenanceTicketUpdate(BaseModel):
+    priority: TicketPriority | None = None
+    status: TicketStatus | None = None
+
+
+class MaintenanceTicketRead(MaintenanceTicketCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: TicketStatus

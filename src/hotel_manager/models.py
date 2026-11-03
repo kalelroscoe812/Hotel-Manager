@@ -102,3 +102,21 @@ class ElectricityMeter(Base):
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), unique=True, nullable=False)
     current_reading: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(50), default="Active")
+
+
+class MaintenanceTicket(Base):
+    __tablename__ = "maintenance_tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[int] = mapped_column(
+        ForeignKey("rooms.id"), nullable=False
+    )
+    description: Mapped[str] = mapped_column(
+        String(500), nullable=False
+    )
+    priority: Mapped[str] = mapped_column(
+        String(20), default="Medium", nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default="Open", nullable=False
+    )
