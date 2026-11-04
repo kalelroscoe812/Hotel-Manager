@@ -4,57 +4,33 @@ import { Building2, Lock, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-r
 
 interface LoginPageProps {
   users: User[];
-  onLogin: (session: UserLoginSession) => void;
+  onAuthenticate: (username: string) => Promise<UserLoginSession>;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ users, onLogin }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ users, onAuthenticate }) => {
   const [usernameInput, setUsernameInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [lastResolvedAction, setLastResolvedAction] = useState<any | null>(null);
 
-  const handleLoginSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const authenticate = async (username: string) => {
     setErrorMessage('');
-    const user = users.find(
-      (u) => u.username.toLowerCase() === usernameInput.trim().toLowerCase()
-    );
-
-    if (!user) {
-      setErrorMessage(
-        `User "${usernameInput}" not found in database. Try one of the test accounts below.`
-      );
-      return;
+    try {
+      const session = await onAuthenticate(username);
+      setLastResolvedAction(session);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Login failed');
     }
+  };
 
-    const session: UserLoginSession = {
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-      hotelId: user.hotelId,
-    };
-
-    setLastResolvedAction(session);
-    setTimeout(() => {
-      onLogin(session);
-    }, 400);
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void authenticate(usernameInput.trim());
   };
 
   const selectQuickAccount = (uname: string) => {
     setUsernameInput(uname);
     setErrorMessage('');
-    const user = users.find((u) => u.username === uname);
-    if (user) {
-      const session: UserLoginSession = {
-        userId: user.id,
-        username: user.username,
-        role: user.role,
-        hotelId: user.hotelId,
-      };
-      setLastResolvedAction(session);
-      setTimeout(() => {
-        onLogin(session);
-      }, 300);
-    }
+    void authenticate(uname);
   };
 
   return (
@@ -64,9 +40,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users, onLogin }) => {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-t-xl text-xs text-slate-400 font-mono">
           <Lock className="w-3.5 h-3.5 text-emerald-400" />
           <span className="text-white">https://hotelmanager.com</span>
-          <span className="ml-auto text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-            Deliverable Oct 27
-          </span>
         </div>
       </div>
 
@@ -134,47 +107,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({ users, onLogin }) => {
         <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400">
-              Quick Role Test Accounts:
+              Accounts from PostgreSQL:
             </span>
-            <span className="text-[10px] text-amber-400">Click to auto-login</span>
+            <span className="text-[10px] text-amber-400">Click to log in</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => selectQuickAccount('admin')}
-              className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-left transition group"
-            >
-              <div className="font-bold text-white group-hover:text-amber-300">admin</div>
-              <div className="text-[10px] text-amber-400 font-semibold">ROLE: ADMIN</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => selectQuickAccount('frontdesk_jane')}
-              className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500/40 text-left transition group"
-            >
-              <div className="font-bold text-white group-hover:text-blue-300">frontdesk_jane</div>
-              <div className="text-[10px] text-blue-400 font-semibold">ROLE: FRONT_DESK</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => selectQuickAccount('manager_mike')}
-              className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/40 text-left transition group"
-            >
-              <div className="font-bold text-white group-hover:text-emerald-300">manager_mike</div>
-              <div className="text-[10px] text-emerald-400 font-semibold">ROLE: PROPERTY_MANAGER</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => selectQuickAccount('engineer_bob')}
-              className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-purple-500/40 text-left transition group"
-            >
-              <div className="font-bold text-white group-hover:text-purple-300">engineer_bob</div>
-              <div className="text-[10px] text-purple-400 font-semibold">ROLE: MAINTENANCE_ENGINEER</div>
-            </button>
+            {users.length === 0 ? (
+              <p className="col-span-2 text-slate-500">
+                No user accounts are stored in PostgreSQL yet.
+              </p>
+            ) : (
+              users.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => selectQuickAccount(user.username)}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-left transition group"
+                >
+                  <div className="font-bold text-white group-hover:text-amber-300">{user.username}</div>
+                  <div className="text-[10px] text-amber-400 font-semibold">ROLE: {user.role}</div>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>

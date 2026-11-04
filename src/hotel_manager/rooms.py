@@ -110,16 +110,21 @@ def update_room_endpoint(
 @router.delete("/{room_id}", status_code=204)
 def delete_room_endpoint(
     room_id: int,
+    delete_meter: bool = False,
     db: Session = Depends(get_db),
 ):
     if services.get_room(db, room_id) is None:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if services.get_meter_by_room(db, room_id) is not None:
+    meter = services.get_meter_by_room(db, room_id)
+    if meter is not None and not delete_meter:
         raise HTTPException(
             status_code=409,
             detail="Remove the associated electricity meter before deleting this room",
         )
 
+    if meter is not None:
+        db.delete(meter)
+        db.commit()
     services.delete_room(db, room_id)
     return Response(status_code=204)

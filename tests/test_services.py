@@ -1,9 +1,12 @@
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from hotel_manager.database import Base
 from hotel_manager.schemas import HotelCreate
 from hotel_manager.services import create_hotel, list_hotels
+
+pytestmark = pytest.mark.unit
 
 
 def test_create_and_list_hotels():

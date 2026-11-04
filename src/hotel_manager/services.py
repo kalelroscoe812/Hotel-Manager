@@ -1,5 +1,5 @@
 from decimal import Decimal
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from hotel_manager.models import Hotel, User, HotelUser, Room, ElectricityMeter
@@ -47,10 +47,13 @@ def delete_hotel(db: Session, hotel_id: int) -> bool:
     hotel = get_hotel(db, hotel_id)
     if not hotel:
         return False
-    # delete associated rooms
-    rooms = list(db.scalars(select(Room).where(Room.hotel_id == hotel_id)))
-    for r in rooms:
-        db.delete(r)
+
+    room_ids = select(Room.id).where(Room.hotel_id == hotel_id)
+    db.execute(
+        delete(ElectricityMeter).where(ElectricityMeter.room_id.in_(room_ids))
+    )
+    db.execute(delete(Room).where(Room.hotel_id == hotel_id))
+    db.execute(delete(HotelUser).where(HotelUser.hotel_id == hotel_id))
     db.delete(hotel)
     db.commit()
     return True
@@ -58,7 +61,7 @@ def delete_hotel(db: Session, hotel_id: int) -> bool:
 
 # ==================== USER SERVICES ====================
 def create_user(db: Session, payload: UserCreate) -> User:
-    user = User(**payload.model_dump())
+    user = User(**payload.model_dump(exclude={"hotel_id"}))
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -81,6 +84,16 @@ def list_users(
 
 def get_user(db: Session, user_id: int) -> User | None:
     return db.scalar(select(User).where(User.id == user_id))
+
+
+def delete_user(db: Session, user_id: int) -> bool:
+    user = get_user(db, user_id)
+    if user is None:
+        return False
+    db.execute(delete(HotelUser).where(HotelUser.user_id == user_id))
+    db.delete(user)
+    db.commit()
+    return True
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:

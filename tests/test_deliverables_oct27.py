@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from hotel_manager.database import Base, get_db
 from hotel_manager.main import app
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def client_and_db(tmp_path):

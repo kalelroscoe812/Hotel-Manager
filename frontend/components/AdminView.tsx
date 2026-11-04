@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Hotel, Room, User } from '../types';
 import {
   Building2,
@@ -21,9 +21,12 @@ interface AdminViewProps {
   rooms: Room[];
   users: User[];
   onOpenCreateHotel: () => void;
-  onUpdateHotel: (hotelId: number, data: Partial<Hotel>) => void;
-  onAddUserToHotel: (hotelId: number, user: Omit<User, 'id'>) => void;
-  onAddRoomToHotel: (hotelId: number, roomNumber: number, status: Room['status']) => void;
+  onUpdateHotel: (hotelId: number, data: Partial<Hotel>) => Promise<void>;
+  onAddUserToHotel: (hotelId: number, user: Omit<User, 'id'>) => Promise<void>;
+  onAddRoomToHotel: (hotelId: number, roomNumber: number, status: Room['status']) => Promise<void>;
+  onDeleteHotel: (hotelId: number) => Promise<void>;
+  onDeleteRoom: (roomId: number) => Promise<void>;
+  onDeleteUser: (userId: number) => Promise<void>;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
@@ -34,6 +37,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onUpdateHotel,
   onAddUserToHotel,
   onAddRoomToHotel,
+  onDeleteHotel,
+  onDeleteRoom,
+  onDeleteUser,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,6 +71,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const [newRoomNumber, setNewRoomNumber] = useState<number>(101);
   const [newRoomStatus, setNewRoomStatus] = useState<Room['status']>('available');
+  const [actionError, setActionError] = useState('');
+
+  useEffect(() => {
+    if (!managedHotel) return;
+    const latestHotel = hotels.find((hotel) => hotel.id === managedHotel.id);
+    setManagedHotel(latestHotel ?? null);
+  }, [hotels, managedHotel?.id]);
 
   const filteredHotels = hotels.filter((h) => {
     const q = searchQuery.toLowerCase();
@@ -82,6 +95,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   );
 
   const openManageHotel = (hotel: Hotel) => {
+    setActionError('');
     setManagedHotel(hotel);
     setEditForm({
       name: hotel.name,
@@ -92,50 +106,65 @@ export const AdminView: React.FC<AdminViewProps> = ({
     setActiveManageTab('details');
   };
 
-  const handleUpdateSubmit = (e: React.FormEvent) => {
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!managedHotel) return;
-    onUpdateHotel(managedHotel.id, {
-      name: editForm.name,
-      address: editForm.address,
-      contactNumber: editForm.contactNumber,
-      totalRooms: Number(editForm.totalRooms),
-    });
-    setManagedHotel({
-      ...managedHotel,
-      name: editForm.name,
-      address: editForm.address,
-      contactNumber: editForm.contactNumber,
-      totalRooms: Number(editForm.totalRooms),
-    });
-    setActiveManageTab('details');
+    setActionError('');
+    try {
+      await onUpdateHotel(managedHotel.id, {
+        name: editForm.name,
+        address: editForm.address,
+        contactNumber: editForm.contactNumber,
+        totalRooms: Number(editForm.totalRooms),
+      });
+      setManagedHotel({
+        ...managedHotel,
+        name: editForm.name,
+        address: editForm.address,
+        contactNumber: editForm.contactNumber,
+        totalRooms: Number(editForm.totalRooms),
+      });
+      setActiveManageTab('details');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not update hotel');
+    }
   };
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!managedHotel) return;
-    onAddUserToHotel(managedHotel.id, {
-      username: newUserForm.username,
-      firstName: newUserForm.firstName,
-      lastName: newUserForm.lastName,
-      role: newUserForm.role,
-      hotelId: managedHotel.id,
-    });
-    setNewUserForm({
-      username: '',
-      firstName: '',
-      lastName: '',
-      role: 'FRONT_DESK',
-    });
-    setActiveManageTab('details');
+    setActionError('');
+    try {
+      await onAddUserToHotel(managedHotel.id, {
+        username: newUserForm.username,
+        firstName: newUserForm.firstName,
+        lastName: newUserForm.lastName,
+        role: newUserForm.role,
+        hotelId: managedHotel.id,
+      });
+      setNewUserForm({
+        username: '',
+        firstName: '',
+        lastName: '',
+        role: 'FRONT_DESK',
+      });
+      setActiveManageTab('details');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not create user');
+    }
   };
 
-  const handleAddRoomSubmit = (e: React.FormEvent) => {
+  const handleAddRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!managedHotel) return;
-    onAddRoomToHotel(managedHotel.id, Number(newRoomNumber), newRoomStatus);
-    setNewRoomNumber((prev) => prev + 1);
-    setActiveManageTab('details');
+    setActionError('');
+    try {
+      await onAddRoomToHotel(managedHotel.id, Number(newRoomNumber), newRoomStatus);
+      setNewRoomNumber((prev) => prev + 1);
+      setActiveManageTab('details');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not create room');
+    }
   };
 
   const hotelRooms = managedHotel ? rooms.filter((r) => r.hotelId === managedHotel.id) : [];
@@ -237,12 +266,20 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => openManageHotel(h)}
-                          className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition border border-amber-500/30"
-                        >
-                          Manage
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openManageHotel(h)}
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition border border-amber-500/30"
+                          >
+                            Manage
+                          </button>
+                          <button
+                            onClick={() => void onDeleteHotel(h.id)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 transition border border-rose-500/30"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -342,6 +379,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
             {/* Tab Contents */}
             <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {actionError && (
+                <p className="mb-4 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                  {actionError}
+                </p>
+              )}
               {/* DETAILS TAB */}
               {activeManageTab === 'details' && (
                 <div className="space-y-6">
@@ -393,6 +435,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                               {u.role}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => void onDeleteUser(u.id)}
+                              className="rounded-md border border-rose-500/30 px-2 py-1 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"
+                            >
+                              Delete
+                            </button>
                           </div>
                         ))
                       )}
@@ -404,24 +453,33 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                       Rooms in this Property ({hotelRooms.length})
                     </h3>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {hotelRooms.map((r) => (
                         <div
                           key={r.id}
-                          className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center"
+                          className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between"
                         >
-                          <span className="font-bold text-white block">Room {r.roomNumber}</span>
-                          <span
-                            className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                              r.status === 'available'
-                                ? 'text-emerald-400'
-                                : r.status === 'OCCUPIED'
-                                ? 'text-blue-400'
-                                : 'text-rose-400'
-                            }`}
+                          <div>
+                            <span className="font-bold text-white block">Room {r.roomNumber}</span>
+                            <span
+                              className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                                r.status === 'available'
+                                  ? 'text-emerald-400'
+                                  : r.status === 'OCCUPIED'
+                                  ? 'text-blue-400'
+                                  : 'text-rose-400'
+                              }`}
+                            >
+                              {r.status}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void onDeleteRoom(r.id)}
+                            className="rounded-md border border-rose-500/30 px-2 py-1 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"
                           >
-                            {r.status}
-                          </span>
+                            Delete
+                          </button>
                         </div>
                       ))}
                     </div>

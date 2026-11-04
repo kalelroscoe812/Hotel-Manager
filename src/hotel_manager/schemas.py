@@ -36,12 +36,14 @@ class UserCreate(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     other_info: str | None = Field(default=None, max_length=255)
     role: str = Field(default="FRONT_DESK")
+    hotel_id: int | None = None
 
 
 class UserRead(UserCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    hotel_id: int | None = None
 
 
 class UserLoginRequest(BaseModel):

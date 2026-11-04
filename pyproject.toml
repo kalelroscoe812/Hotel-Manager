@@ -19,6 +19,12 @@ dev = [
     "pytest>=8.4.2",
 ]
 
+[tool.pytest.ini_options]
+markers = [
+    "unit: isolated tests for application services and business logic",
+    "integration: API tests covering request handling and database persistence",
+]
+
 [project.scripts]
 hotel-manager = "hotel_manager:main"
 
