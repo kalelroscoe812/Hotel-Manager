@@ -160,17 +160,32 @@ http://localhost:3000
 
 ---
 
-### 2. Running the FastAPI Backend
+### 2. Running the FastAPI Backend with PostgreSQL
 
-#### Using `uv` (Recommended)
+From the repository root, run these commands to start PostgreSQL and the backend. The Compose file starts PostgreSQL only; it does not start MySQL or the frontend.
+
 ```bash
+# Start PostgreSQL
+docker compose -f local/postgres/docker-compose.yml up -d
+
+# Wait until PostgreSQL accepts connections
+docker exec capstone-postgres pg_isready -U capstone -d capstone
+
+# Install/sync dependencies on first setup or after dependency changes
 uv sync
+
+# Create or update the database schema
+uv run alembic upgrade head
+
+# Start the API
 uv run fastapi dev src/hotel_manager/main.py
 ```
 
-#### Using Standard Python / Uvicorn
+The API is available at `http://127.0.0.1:8000`.
+
+#### Alternative: Standard Python / Uvicorn
 ```bash
-# Set Python path and start uvicorn
+# Set the Python path and start Uvicorn
 PYTHONPATH=src python -m uvicorn hotel_manager.main:app --reload --port 8000
 ```
 
@@ -181,17 +196,13 @@ Interactive API Documentation:
 
 ---
 
-### 3. Running Database with Docker Compose (PostgreSQL)
+### 3. PostgreSQL Database Details
 
-To use local PostgreSQL instead of SQLite:
+The backend uses the local PostgreSQL container by default. Section 2 includes the complete first-time startup sequence and schema migration command.
 
-```bash
-# Start PostgreSQL container
-docker compose -f local/postgres/docker-compose.yml up -d
+The React app reads and writes hotels, rooms, users, and meter readings through the FastAPI backend. Vite proxies `/api` requests to `http://127.0.0.1:8000`; run both development servers and apply database migrations before using the UI. The UI's create and delete actions now persist to PostgreSQL.
 
-# Verify connection
-docker exec capstone-postgres pg_isready -U capstone -d capstone
-```
+Existing browser `localStorage` data is not automatically imported or deleted. New and updated UI data is stored in PostgreSQL.
 
 Default PostgreSQL Connection:
 ```text
@@ -200,24 +211,27 @@ postgresql+psycopg://capstone:capstone@localhost:5432/capstone
 
 ---
 
-### 4. Running the Test Suite
+### 4. Running Isolated Test Groups
 
-Run the full pytest suite:
+Unit tests exercise the service layer directly with an in-memory SQLite database:
 
 ```bash
-# Using uv
+uv run pytest -m unit
+```
+
+Integration tests exercise FastAPI endpoints and database persistence using isolated SQLite test databases. They do not require a running PostgreSQL server:
+
+```bash
+uv run pytest -m integration
+```
+
+Run every test:
+
+```bash
 uv run pytest
-
-# Or using python directly
-PYTHONPATH=src python -m pytest
 ```
 
-Expected result:
-```text
-- tests/test_api.py (Hotel creation & listing)
-- tests/test_services.py (Hotel ORM services)
-- tests/test_deliverables_oct27.py (Hotel, User, Room, Meter & Auth APIs)
-```
+`tests/test_services.py` is marked `unit`. `tests/test_api.py`, `tests/test_deliverables_oct27.py`, and `tests/test_room_inventory.py` are marked `integration`.
 
 ---
 
@@ -251,7 +265,7 @@ Pre-configured launch and task profiles are included in `.vscode/`:
 │   │   └── RoomsView.tsx        # Room inventory matrix
 │   ├── App.tsx                  # App state & role routing
 │   ├── main.tsx                 # React entry point
-│   ├── storage.ts               # Local persistence & initial seeds
+│   ├── api.ts                   # Backend API client for PostgreSQL data
 │   └── types.ts                 # TypeScript data contracts
 ├── src/
 │   └── hotel_manager/

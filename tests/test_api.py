@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 from hotel_manager.database import Base, get_db
 from hotel_manager.main import app
 
+pytestmark = pytest.mark.integration
+
 
 def test_hotel_api_creates_and_lists_hotel(tmp_path):
     engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'hotel_manager.db'}")

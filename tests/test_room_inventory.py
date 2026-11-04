@@ -12,6 +12,8 @@ from hotel_manager.database import Base, get_db
 from hotel_manager.main import app
 from hotel_manager.models import ElectricityMeter
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def room_client(tmp_path):
@@ -345,7 +347,54 @@ def test_delete_room_with_meter_returns_409(room_client):
     assert client.get(f"/rooms/{room['id']}").status_code == 200
 
 
-def test_meter_creation_and_update(room_client):
+def test_delete_room_can_also_delete_meter_when_requested(room_client):
+    client, session_factory = room_client
+    hotel_id = create_hotel(client)
+    room = create_room(client, hotel_id)
+    meter = client.post(
+        "/meters",
+        json={"room_id": room["id"], "current_reading": 25.0, "status": "Active"},
+    ).json()
+
+    response = client.delete(
+        f"/rooms/{room['id']}",
+        params={"delete_meter": "true"},
+    )
+
+    assert response.status_code == 204
+    assert client.get(f"/rooms/{room['id']}").status_code == 404
+    assert client.delete(f"/meters/{meter['id']}").status_code == 404
+
+
+def test_delete_hotel_removes_rooms_meters_and_assignments(room_client):
+    client, session_factory = room_client
+    hotel_id = create_hotel(client)
+    room = create_room(client, hotel_id)
+    client.post(
+        "/meters",
+        json={"room_id": room["id"], "current_reading": 25.0, "status": "Active"},
+    )
+    user = client.post(
+        "/users",
+        json={
+            "username": "hotel_staff",
+            "first_name": "Hotel",
+            "last_name": "Staff",
+            "role": "FRONT_DESK",
+        },
+    ).json()
+    client.post(f"/hotels/{hotel_id}/users/{user['id']}/bind")
+
+    response = client.delete(f"/hotels/{hotel_id}")
+
+    assert response.status_code == 204
+    assert client.get(f"/hotels/{hotel_id}").status_code == 404
+    assert client.get(f"/rooms/{room['id']}").status_code == 404
+    assert client.get(f"/rooms/{room['id']}/meter").status_code == 404
+    assert client.post("/login", json={"username": "hotel_staff"}).json()["hotel_id"] is None
+
+
+def test_meter_creation_update_and_delete(room_client):
     client, session_factory = room_client
     hotel_id = create_hotel(client)
     room = create_room(client, hotel_id)
@@ -386,6 +435,14 @@ def test_meter_creation_and_update(room_client):
     assert response.json()["current_reading"] == 150.75
     assert response.json()["status"] == "Inactive"
 
+    response = client.get("/meters")
+    assert response.status_code == 200
+    assert [meter["id"] for meter in response.json()] == [meter_id]
+
+    response = client.delete(f"/meters/{meter_id}")
+    assert response.status_code == 204
+    assert client.get(f"/rooms/{room_id}/meter").status_code == 404
+
     with session_factory() as session:
         meters = (
             session.query(ElectricityMeter)
@@ -393,7 +450,7 @@ def test_meter_creation_and_update(room_client):
             .all()
         )
 
-        assert len(meters) == 1
+        assert len(meters) == 0
 
 
 def test_meter_endpoints_reject_missing_room(room_client):

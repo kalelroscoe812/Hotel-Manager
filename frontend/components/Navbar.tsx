@@ -45,9 +45,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base text-white tracking-tight">Hotel Manager</span>
-                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-amber-500/20">
-                  Oct 27 Deliverable
-                </span>
               </div>
               <div className="text-[11px] text-slate-400">
                 FastAPI Backend • React UI • 0 Breaking Changes

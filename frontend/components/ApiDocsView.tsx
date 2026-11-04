@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Terminal, Play, Copy, Check, Code2 } from 'lucide-react';
-import { Hotel, Room } from '../types';
+import { Hotel, HotelCreatePayload, Room } from '../types';
 
 interface ApiDocsViewProps {
   hotels: Hotel[];
   rooms: Room[];
-  onCreateHotel: (hotel: { name: string; address: string; city: string; country: string }) => void;
-  onCreateRoom: (room: { hotelId: number; roomNumber: number; status: any; roomType?: any; floor?: number; pricePerNight?: number }) => void;
+  onCreateHotel: (hotel: HotelCreatePayload) => Promise<Hotel>;
+  onCreateRoom: (room: { hotelId: number; roomNumber: number; status: Room['status']; roomType?: Room['roomType']; floor?: number; pricePerNight?: number }) => Promise<Room>;
 }
 
 export const ApiDocsView: React.FC<ApiDocsViewProps> = ({
@@ -39,36 +39,43 @@ export const ApiDocsView: React.FC<ApiDocsViewProps> = ({
     setTimeout(() => setCopiedCmd(null), 2000);
   };
 
-  const executeEndpoint = (key: string) => {
+  const executeEndpoint = async (key: string) => {
     const startTime = performance.now();
-    if (key === 'get-root') {
-      const resp = { service: 'hotel-manager', status: 'ok' };
-      setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime + 8), body: resp });
-    } else if (key === 'get-hotels') {
-      setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime + 12), body: hotels });
-    } else if (key === 'post-hotels') {
-      onCreateHotel(hotelPayload);
-      const newHotel = { id: hotels.length + 1, ...hotelPayload };
-      setResponseOutput({ status: 201, timeMs: Math.round(performance.now() - startTime + 15), body: newHotel });
-    } else if (key === 'get-hotel-by-id') {
-      const match = hotels.find((h) => h.id === Number(hotelIdParam));
-      if (match) {
-        setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime + 6), body: match });
+    try {
+      if (key === 'get-root') {
+        const response = await fetch('/api/');
+        const body = await response.json();
+        setResponseOutput({ status: response.status, timeMs: Math.round(performance.now() - startTime), body });
+      } else if (key === 'get-hotels') {
+        setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime), body: hotels });
+      } else if (key === 'post-hotels') {
+        const hotel = await onCreateHotel(hotelPayload);
+        setResponseOutput({ status: 201, timeMs: Math.round(performance.now() - startTime), body: hotel });
+      } else if (key === 'get-hotel-by-id') {
+        const response = await fetch(`/api/hotels/${hotelIdParam}`);
+        const body = await response.json();
+        setResponseOutput({ status: response.status, timeMs: Math.round(performance.now() - startTime), body });
+      } else if (key === 'get-rooms') {
+        setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime), body: rooms });
+      } else if (key === 'post-rooms') {
+        const room = await onCreateRoom({
+          hotelId: hotels[0]?.id || 1,
+          roomNumber: roomNumberParam,
+          status: 'available',
+        });
+        setResponseOutput({
+          status: 201,
+          timeMs: Math.round(performance.now() - startTime),
+          body: room,
+        });
       } else {
-        setResponseOutput({ status: 404, timeMs: 6, body: { detail: 'Hotel not found' } });
+        setResponseOutput({ status: 404, timeMs: 0, body: { detail: 'Unknown endpoint' } });
       }
-    } else if (key === 'get-rooms') {
-      setResponseOutput({ status: 200, timeMs: Math.round(performance.now() - startTime + 10), body: rooms });
-    } else if (key === 'post-rooms') {
-      onCreateRoom({
-        hotelId: hotels[0]?.id || 1,
-        roomNumber: roomNumberParam,
-        status: 'available',
-      });
+    } catch (error) {
       setResponseOutput({
-        status: 201,
-        timeMs: 14,
-        body: { message: 'Room created successfully', room_number: roomNumberParam, status: 'available' },
+        status: 500,
+        timeMs: Math.round(performance.now() - startTime),
+        body: { detail: error instanceof Error ? error.message : 'Request failed' },
       });
     }
   };
@@ -108,7 +115,7 @@ export const ApiDocsView: React.FC<ApiDocsViewProps> = ({
               key={ep.id}
               onClick={() => {
                 setActiveEndpoint(ep.id);
-                executeEndpoint(ep.id);
+                void executeEndpoint(ep.id);
               }}
               className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between ${
                 activeEndpoint === ep.id

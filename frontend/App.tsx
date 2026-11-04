@@ -15,18 +15,19 @@ import {
   HotelCreatePayload,
 } from './types';
 import {
-  getStoredHotels,
-  saveStoredHotels,
-  getStoredRooms,
-  saveStoredRooms,
-  getStoredUsers,
-  saveStoredUsers,
-  getStoredMeters,
-  saveStoredMeters,
-  resetAllData,
-  appendApiLog,
-} from './storage';
-import { CheckCircle2, ShieldCheck, ArrowRight, UserCheck } from 'lucide-react';
+  createHotel as createBackendHotel,
+  createRoom as createBackendRoom,
+  createUser as createBackendUser,
+  deleteHotel as deleteBackendHotel,
+  deleteRoom as deleteBackendRoom,
+  deleteUser as deleteBackendUser,
+  loadBackendData,
+  login as loginBackend,
+  saveMeterReading,
+  updateHotel as updateBackendHotel,
+  updateRoomStatus,
+} from './api';
+import { CheckCircle2 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -44,17 +45,40 @@ export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('role-view');
   const [isCreateHotelOpen, setIsCreateHotelOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const refreshBackendData = async () => {
+    const data = await loadBackendData();
+    setHotels(data.hotels);
+    setRooms(data.rooms);
+    setUsers(data.users);
+    setMeters(data.meters);
+  };
+
   useEffect(() => {
-    setHotels(getStoredHotels());
-    setRooms(getStoredRooms());
-    setUsers(getStoredUsers());
-    setMeters(getStoredMeters());
+    let active = true;
+    loadBackendData()
+      .then((data) => {
+        if (!active) return;
+        setHotels(data.hotels);
+        setRooms(data.rooms);
+        setUsers(data.users);
+        setMeters(data.meters);
+        setBackendError(null);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : 'Unknown backend error';
+        setBackendError(`Could not load PostgreSQL data: ${message}`);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleLogin = (newSession: UserLoginSession) => {
@@ -68,148 +92,128 @@ export const App: React.FC = () => {
     setCurrentTab('login');
   };
 
-  // Hotel Actions
-  const handleCreateHotel = (payload: HotelCreatePayload) => {
-    const newId = hotels.length > 0 ? Math.max(...hotels.map((h) => h.id)) + 1 : 1;
-    const newHotel: Hotel = {
-      id: newId,
-      name: payload.name.trim(),
-      address: `${payload.address}, ${payload.city}, ${payload.country}`,
-      city: payload.city,
-      country: payload.country,
-      totalRooms: 0,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...hotels, newHotel];
-    setHotels(updated);
-    saveStoredHotels(updated);
-
-    appendApiLog({
-      method: 'POST',
-      endpoint: '/hotels',
-      statusCode: 201,
-      responseTimeMs: 12,
-      requestBody: payload,
-      responseBody: newHotel,
-    });
-
-    showToast(`Hotel "${newHotel.name}" created`);
-  };
-
-  const handleUpdateHotel = (hotelId: number, data: Partial<Hotel>) => {
-    const updated = hotels.map((h) => (h.id === hotelId ? { ...h, ...data } : h));
-    setHotels(updated);
-    saveStoredHotels(updated);
-
-    appendApiLog({
-      method: 'PUT',
-      endpoint: `/hotels/${hotelId}`,
-      statusCode: 200,
-      responseTimeMs: 10,
-      requestBody: data,
-    });
-
-    showToast(`Hotel #${hotelId} updated`);
-  };
-
-  // Admin Manage: Add User to Hotel
-  const handleAddUserToHotel = (hotelId: number, userData: Omit<User, 'id'>) => {
-    const newId = users.length > 0 ? Math.max(...users.map((u) => u.id)) + 1 : 1;
-    const newUser: User = {
-      id: newId,
-      ...userData,
-      hotelId,
-    };
-    const updated = [...users, newUser];
-    setUsers(updated);
-    saveStoredUsers(updated);
-
-    appendApiLog({
-      method: 'POST',
-      endpoint: '/users',
-      statusCode: 201,
-      responseTimeMs: 14,
-      requestBody: userData,
-    });
-
-    showToast(`User @${newUser.username} added and bound to Hotel #${hotelId}`);
-  };
-
-  // Admin Manage: Add Room to Hotel
-  const handleAddRoomToHotel = (hotelId: number, roomNumber: number, status: Room['status']) => {
-    const newId = rooms.length > 0 ? Math.max(...rooms.map((r) => r.id)) + 1 : 1;
-    const newRoom: Room = {
-      id: newId,
-      hotelId,
-      roomNumber,
-      status,
-      pricePerNight: 200,
-    };
-    const updatedRooms = [...rooms, newRoom];
-    setRooms(updatedRooms);
-    saveStoredRooms(updatedRooms);
-
-    // Also create electricity meter for new room
-    const newMeter: ElectricityMeter = {
-      id: meters.length > 0 ? Math.max(...meters.map((m) => m.id)) + 1 : 1,
-      roomId: newId,
-      currentReading: 0.0,
-      status: 'Active',
-    };
-    const updatedMeters = [...meters, newMeter];
-    setMeters(updatedMeters);
-    saveStoredMeters(updatedMeters);
-
-    // Update totalRooms on hotel
-    const hotel = hotels.find((h) => h.id === hotelId);
-    if (hotel) {
-      handleUpdateHotel(hotelId, { totalRooms: hotel.totalRooms + 1 });
+  const handleCreateHotel = async (payload: HotelCreatePayload): Promise<Hotel> => {
+    try {
+      const hotel = await createBackendHotel(payload);
+      setHotels((current) => [...current, hotel]);
+      setBackendError(null);
+      showToast(`Hotel "${hotel.name}" saved to PostgreSQL`);
+      return hotel;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not create hotel');
+      throw error;
     }
-
-    showToast(`Room ${roomNumber} added with Active Electricity Meter`);
   };
 
-  // Room Status Change
-  const handleRoomStatusChange = (roomId: number, status: Room['status']) => {
-    const updated = rooms.map((r) => {
-      if (r.id === roomId) {
-        return {
-          ...r,
-          status,
-          guestName: status === 'OCCUPIED' ? (r.guestName || 'Guest User') : undefined,
-        };
-      }
-      return r;
-    });
-    setRooms(updated);
-    saveStoredRooms(updated);
-
-    appendApiLog({
-      method: 'PUT',
-      endpoint: `/rooms/${roomId}`,
-      statusCode: 200,
-      responseTimeMs: 8,
-      requestBody: { status },
-    });
-
-    showToast(`Room #${roomId} status changed to ${status}`);
+  const handleUpdateHotel = async (hotelId: number, data: Partial<Hotel>) => {
+    try {
+      const updatedHotel = await updateBackendHotel(hotelId, data);
+      setHotels((current) => current.map((hotel) => hotel.id === hotelId ? updatedHotel : hotel));
+      showToast(`Hotel #${hotelId} updated in PostgreSQL`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update hotel');
+      throw error;
+    }
   };
 
-  // Meter Reading Update
-  const handleUpdateMeterReading = (roomId: number, reading: number) => {
-    const updated = meters.map((m) => (m.roomId === roomId ? { ...m, currentReading: reading } : m));
-    setMeters(updated);
-    saveStoredMeters(updated);
+  const handleDeleteHotel = async (hotelId: number) => {
+    if (!confirm('Delete this hotel and its rooms, meters, and hotel assignments from PostgreSQL?')) return;
+    try {
+      await deleteBackendHotel(hotelId);
+      await refreshBackendData();
+      showToast(`Hotel #${hotelId} and its associated records were deleted`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete hotel');
+    }
+  };
 
-    appendApiLog({
-      method: 'POST',
-      endpoint: '/meters',
-      statusCode: 200,
-      responseTimeMs: 9,
-      requestBody: { room_id: roomId, current_reading: reading },
-    });
+  const handleAddUserToHotel = async (hotelId: number, userData: Omit<User, 'id'>) => {
+    try {
+      const user = await createBackendUser(hotelId, userData);
+      setUsers((current) => [...current, user]);
+      showToast(`User @${user.username} saved and bound to Hotel #${hotelId}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not create user');
+      throw error;
+    }
+  };
 
-    showToast(`Room #${roomId} meter updated to ${reading} kWh`);
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm('Delete this user and all hotel assignments from PostgreSQL?')) return;
+    try {
+      await deleteBackendUser(userId);
+      setUsers((current) => current.filter((user) => user.id !== userId));
+      showToast(`User #${userId} was deleted`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete user');
+    }
+  };
+
+  const handleAddRoomToHotel = async (hotelId: number, roomNumber: number, status: Room['status']): Promise<Room> => {
+    try {
+      const { room, meter } = await createBackendRoom({
+        hotelId,
+        roomNumber,
+        status,
+        roomType: 'Standard',
+        floor: 1,
+        pricePerNight: 200,
+      });
+      setRooms((current) => [...current, room]);
+      setMeters((current) => [...current, meter]);
+      await refreshBackendData();
+      showToast(`Room ${roomNumber} and its meter saved to PostgreSQL`);
+      return room;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not create room');
+      throw error;
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: number) => {
+    if (!confirm('Delete this room and its electricity meter from PostgreSQL?')) return;
+    try {
+      await deleteBackendRoom(roomId);
+      await refreshBackendData();
+      showToast(`Room #${roomId} and its meter were deleted`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete room');
+    }
+  };
+
+  const handleRoomStatusChange = async (roomId: number, status: Room['status']) => {
+    try {
+      const updatedRoom = await updateRoomStatus(roomId, status);
+      setRooms((current) => current.map((room) => room.id === roomId ? updatedRoom : room));
+      showToast(`Room #${roomId} status saved`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update room status');
+    }
+  };
+
+  const handleUpdateMeterReading = async (roomId: number, reading: number) => {
+    try {
+      const meter = await saveMeterReading(roomId, reading);
+      setMeters((current) => [
+        ...current.filter((existing) => existing.roomId !== roomId),
+        meter,
+      ]);
+      showToast(`Room #${roomId} meter reading saved`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update meter');
+    }
+  };
+
+  const handleBackendLogin = async (username: string): Promise<UserLoginSession> => {
+    const user = await loginBackend(username);
+    const newSession = {
+      userId: user.user_id,
+      username: user.username,
+      role: user.role,
+      hotelId: user.hotel_id,
+    };
+    handleLogin(newSession);
+    return newSession;
   };
 
   return (
@@ -278,15 +282,20 @@ export const App: React.FC = () => {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {backendError && (
+          <div className="mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+            {backendError}
+          </div>
+        )}
         {!session || currentTab === 'login' ? (
-          <LoginPage users={users} onLogin={handleLogin} />
+          <LoginPage users={users} onAuthenticate={handleBackendLogin} />
         ) : currentTab === 'audit' ? (
           <DeliverablesAnalysisModal />
         ) : currentTab === 'api' ? (
           <ApiDocsView
             hotels={hotels}
             rooms={rooms}
-            onCreateHotel={(h) => handleCreateHotel(h as any)}
+            onCreateHotel={handleCreateHotel}
             onCreateRoom={(r) => handleAddRoomToHotel(r.hotelId, r.roomNumber, r.status)}
           />
         ) : currentTab === 'role-view' ? (
@@ -299,7 +308,12 @@ export const App: React.FC = () => {
                 onOpenCreateHotel={() => setIsCreateHotelOpen(true)}
                 onUpdateHotel={handleUpdateHotel}
                 onAddUserToHotel={handleAddUserToHotel}
-                onAddRoomToHotel={handleAddRoomToHotel}
+                onAddRoomToHotel={async (...args) => {
+                  await handleAddRoomToHotel(...args);
+                }}
+                onDeleteHotel={handleDeleteHotel}
+                onDeleteRoom={handleDeleteRoom}
+                onDeleteUser={handleDeleteUser}
               />
             )}
 
@@ -341,26 +355,13 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-400">Hotel Manager Capstone</span>
             <span>•</span>
-            <span className="text-emerald-400">5/5 Pytests Passing</span>
+            <span className={backendError ? 'text-rose-400' : 'text-emerald-400'}>
+              {backendError ? 'Backend unavailable' : 'PostgreSQL connected'}
+            </span>
             <span>•</span>
             <span>Port 3000 Active</span>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                if (confirm('Reset sample database to default seed state?')) {
-                  resetAllData();
-                  setHotels(getStoredHotels());
-                  setRooms(getStoredRooms());
-                  setUsers(getStoredUsers());
-                  setMeters(getStoredMeters());
-                  showToast('Database reset to defaults');
-                }
-              }}
-              className="hover:text-amber-400 transition"
-            >
-              Reset Sample Data
-            </button>
             <button
               onClick={() => setCurrentTab('audit')}
               className="text-amber-400 hover:underline font-semibold"

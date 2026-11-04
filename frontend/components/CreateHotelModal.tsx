@@ -5,7 +5,7 @@ import { HotelCreatePayload } from '../types';
 interface CreateHotelModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: HotelCreatePayload) => void;
+  onSubmit: (payload: HotelCreatePayload) => Promise<unknown>;
 }
 
 export const CreateHotelModal: React.FC<CreateHotelModalProps> = ({
@@ -20,6 +20,8 @@ export const CreateHotelModal: React.FC<CreateHotelModalProps> = ({
     country: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -41,12 +43,20 @@ export const CreateHotelModal: React.FC<CreateHotelModalProps> = ({
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      onSubmit(form);
-      setForm({ name: '', address: '', city: '', country: '' });
-      onClose();
+      setSubmitError('');
+      setIsSubmitting(true);
+      try {
+        await onSubmit(form);
+        setForm({ name: '', address: '', city: '', country: '' });
+        onClose();
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : 'Could not create hotel');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -72,6 +82,11 @@ export const CreateHotelModal: React.FC<CreateHotelModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {submitError && (
+            <p className="text-xs text-rose-300 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
+              {submitError}
+            </p>
+          )}
           <div>
             <label className="text-xs font-semibold text-slate-300 block mb-1">
               Hotel Name <span className="text-rose-400">*</span>
@@ -148,9 +163,10 @@ export const CreateHotelModal: React.FC<CreateHotelModalProps> = ({
             </button>
             <button
               type="submit"
+              disabled={isSubmitting}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-md shadow-amber-500/20"
             >
-              Create Hotel Record
+              {isSubmitting ? 'Saving...' : 'Create Hotel Record'}
             </button>
           </div>
         </form>
