@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.0] - 2026-11-11
+### Added
+- **Project Vision, Requirements, and Design Document (`docs/PROJECT_VISION_REQUIREMENTS_DESIGN.md`)**:
+  - Authored comprehensive enterprise engineering documentation according to the course documentation template for **Morehouse College**, **HCSC 460-01 (Senior Capstone)**, **Group 3** (Authors: Kalel Roscoe, Shanterrian Walker, OBrien White, Jonathan Porter, KeiShaun Mortis, Silas Erving).
+  - Included thermodynamic sensible heat gain ($Q_s = 1.08 \times \text{CFM} \times \Delta T$) and electrical energy cost equations.
+  - Authored complete Mermaid system diagrams: Feature Tree, Use Case Diagram, System Context Flow, Room Lifecycle State Chart, Module Decomposition, Entity-Relationship (ER) Diagram, Activity Diagrams (Turnover & Submetering), and UML Class Diagram.
+  - Documented role-based user stories, structured use cases, operating environment, and group meeting minutes.
+
+### Changed
+- **README.md Architecture & Database Stack Update**:
+  - Formally updated backend architecture documentation to reflect **pure PostgreSQL 16** as the primary relational database engine.
+  - Synchronized repository directory tree and removed obsolete SQLite references.
+  - Updated validation section to reflect 100% passing test rate (49/49 passing automated tests).
+
 ## [0.4.0] - 2026-11-11
 ### Added
 - **Authentication & Security Layer**:
