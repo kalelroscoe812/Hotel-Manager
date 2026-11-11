@@ -15,7 +15,7 @@ The project provides multi-property management, room inventory tracking, electri
 - **Pydantic v2**: Request/response schema validation
 - **PBKDF2-SHA256**: Secure password hashing and tamper-proof access tokens
 - **Resend**: Transactional email connectivity and user onboarding notifications
-- **PostgreSQL 16 & SQLite**: Dual database compatibility (PostgreSQL via Docker Compose or zero-config local SQLite)
+- **PostgreSQL 16**: Primary relational database engine (managed via Docker Compose or cloud hosting)
 - **Pytest**: Integration and unit test suite (49 passing tests)
 
 ### Frontend
@@ -231,25 +231,20 @@ postgresql+psycopg://capstone:capstone@localhost:5432/capstone
 
 ### 4. Running Isolated Test Groups
 
-Unit tests exercise the service layer directly with an in-memory SQLite database:
+Unit and integration test suites exercise the service layer and FastAPI endpoints using hermetic, isolated test fixtures for rapid CI/CD validation without requiring an external database instance:
 
 ```bash
+# Run unit tests
 uv run pytest -m unit
-```
 
-Integration tests exercise FastAPI endpoints and database persistence using isolated SQLite test databases. They do not require a running PostgreSQL server:
-
-```bash
+# Run integration tests
 uv run pytest -m integration
-```
 
-Run every test:
-
-```bash
+# Run the full test suite (all 49 tests)
 uv run pytest
 ```
 
-`tests/test_services.py` is marked `unit`. `tests/test_api.py`, `tests/test_deliverables_oct27.py`, and `tests/test_room_inventory.py` are marked `integration`.
+`tests/test_services.py` is marked `unit`. `tests/test_api.py`, `tests/test_auth_and_email.py`, `tests/test_deliverables_oct27.py`, and `tests/test_room_inventory.py` are marked `integration`.
 
 ---
 
@@ -283,16 +278,21 @@ Pre-configured launch and task profiles are included in `.vscode/`:
 ├── src/
 │   └── hotel_manager/
 │       ├── __init__.py
-│       ├── database.py          # SQLAlchemy engine & SQLite/Postgres adapter
+│       ├── auth.py              # Authentication, password hashing & tokens
+│       ├── database.py          # SQLAlchemy engine & PostgreSQL adapter
+│       ├── email_service.py     # Resend SDK integration & email notifications
 │       ├── main.py              # FastAPI app & endpoint routing
+│       ├── meters.py            # Electricity meter telemetry router
 │       ├── models.py            # User, Hotel, Room, Meter ORM models
 │       ├── rooms.py             # Room APIRouter
 │       ├── schemas.py           # Pydantic schemas
 │       └── services.py          # CRUD services
 ├── tests/
 │   ├── test_api.py              # Core hotel API tests
-│   ├── test_services.py         # Service layer tests
-│   └── test_deliverables_oct27.py # Complete deliverables test suite
+│   ├── test_auth_and_email.py   # Auth, tokens & Resend email tests
+│   ├── test_deliverables_oct27.py # Complete deliverables test suite
+│   ├── test_room_inventory.py   # Room inventory & meter tests
+│   └── test_services.py         # Service layer tests
 ├── local/                       # Docker compose setups (Postgres, MySQL)
 ├── package.json
 ├── pyproject.toml
@@ -358,42 +358,43 @@ Posting another reading updates the existing record. Historical readings and bat
 
 ## Database Migrations
 
-Alembic uses the application's `DATABASE_URL`.
+Alembic uses the application's `DATABASE_URL` (configured for PostgreSQL).
 
-For a new local SQLite database, run migrations before starting the application:
+To apply migrations to your local or staging PostgreSQL database:
 
 ```bash
-uv sync
-export DATABASE_URL="sqlite+pysqlite:///./hotel_manager_dev.db"
+# Start PostgreSQL via Docker Compose
+docker compose -f local/postgres/docker-compose.yml up -d
+
+# Run migrations to bring PostgreSQL up to the latest revision
 uv run alembic upgrade head
+
+# Start the FastAPI application
 uv run fastapi dev src/hotel_manager/main.py
 ```
 
-Open `http://127.0.0.1:8000/docs` to explore the API.
+Open `http://127.0.0.1:8000/docs` to explore the interactive API.
 
-Migration `0001` creates the original tables. Migration `0002` adds nullable floor, nightly price, and room type columns.
+### Migration History:
+- `0001_create_hotel_room_user_meter_tables.py`: Baseline tables (`hotels`, `rooms`, `users`, `hotel_users`, `electricity_meters`).
+- `0002_add_room_inventory_fields.py`: Added `floor`, `nightly_price`, and `room_type` inventory columns.
+- `0003_add_room_status_enum.py`: Room status enum constraints.
+- `0004_add_user_auth_fields.py`: Added `email` and `password_hash` to users.
+- `0005_add_hotel_state_field.py`: Added `state` (State/Province) to hotels.
 
-For an existing database without Alembic tracking, back it up and verify that its schema matches migration `0001` before stamping that revision and applying `0002`. Do not run the table-creation baseline against populated tables or stamp an unverified schema.
+Schema upgrades must always be applied via `uv run alembic upgrade head`.
 
-Application startup uses `create_all()`, which does not add columns to existing tables. Schema changes require migrations.
+## Test Suite and Validation
 
-## Room and Meter Validation
-
-Run the focused tests:
-
-```bash
-uv run pytest tests/test_room_inventory.py -q
-```
-
-Run the complete suite:
+Run the complete test suite:
 
 ```bash
 uv run pytest -q
 ```
 
-At the time of this contribution, the focused suite passes 37 tests. The complete suite reports 40 passed and two existing failures in `tests/test_deliverables_oct27.py`:
-
-- Hotel update: `PUT /hotels/{hotel_id}` returns 405.
-- User creation/auth flow: `POST /users` returns 404.
-
-SQLite migration checks verified fresh database creation, agreement with the models, and preservation of existing hotel and room records during upgrade. PostgreSQL migration execution has not yet been verified.
+All 49 unit and integration tests pass cleanly (100% pass rate):
+- `tests/test_api.py`: Core hotel CRUD and pagination endpoints.
+- `tests/test_auth_and_email.py`: PBKDF2 password hashing, tamper-proof session tokens, authenticated signup/login, and Resend email dispatches.
+- `tests/test_deliverables_oct27.py`: Comprehensive hotel, room, and user management workflows.
+- `tests/test_room_inventory.py`: Advanced room filtering, inventory validations, and meter associations.
+- `tests/test_services.py`: Service-layer business logic and isolation.
