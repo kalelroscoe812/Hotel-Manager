@@ -3,8 +3,7 @@ import { Navbar } from './components/Navbar';
 import { LoginPage } from './components/LoginPage';
 import { AdminView } from './components/AdminView';
 import { FrontDeskView, PropertyManagerView, MaintenanceEngineerView } from './components/RoleViews';
-import { ApiDocsView } from './components/ApiDocsView';
-import { DeliverablesAnalysisModal } from './components/DeliverablesAnalysisModal';
+import { GuestView } from './components/GuestView';
 import { CreateHotelModal } from './components/CreateHotelModal';
 import {
   Hotel,
@@ -13,6 +12,11 @@ import {
   ElectricityMeter,
   UserLoginSession,
   HotelCreatePayload,
+  SignupPayload,
+  UserCreatePayload,
+  UserUpdatePayload,
+  BookingReservation,
+  formatRole,
 } from './types';
 import {
   createHotel as createBackendHotel,
@@ -23,9 +27,15 @@ import {
   deleteUser as deleteBackendUser,
   loadBackendData,
   login as loginBackend,
+  signup as signupBackend,
+  logout as logoutBackend,
+  getStoredSession,
+  connectUserEmail,
+  sendTestEmail,
   saveMeterReading,
   updateHotel as updateBackendHotel,
   updateRoomStatus,
+  updateUser as updateBackendUser,
 } from './api';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -35,29 +45,31 @@ export const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [meters, setMeters] = useState<ElectricityMeter[]>([]);
 
-  // Session state: default to ADMIN for instant evaluator experience, but fully supports logout / login
-  const [session, setSession] = useState<UserLoginSession | null>({
-    userId: 1,
-    username: 'admin',
-    role: 'ADMIN',
-  });
+  // Authenticated session state: restored from localStorage or null (requires login)
+  const [session, setSession] = useState<UserLoginSession | null>(getStoredSession());
 
-  const [currentTab, setCurrentTab] = useState<string>('role-view');
+  const [currentTab, setCurrentTab] = useState<string>(getStoredSession() ? 'role-view' : 'login');
   const [isCreateHotelOpen, setIsCreateHotelOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   const refreshBackendData = async () => {
-    const data = await loadBackendData();
-    setHotels(data.hotels);
-    setRooms(data.rooms);
-    setUsers(data.users);
-    setMeters(data.meters);
+    try {
+      const data = await loadBackendData();
+      setHotels(data.hotels);
+      setRooms(data.rooms);
+      setUsers(data.users);
+      setMeters(data.meters);
+      setBackendError(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown backend error';
+      setBackendError(`Could not refresh backend data: ${message}`);
+    }
   };
 
   useEffect(() => {
@@ -74,22 +86,38 @@ export const App: React.FC = () => {
       .catch((error: unknown) => {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Unknown backend error';
-        setBackendError(`Could not load PostgreSQL data: ${message}`);
+        setBackendError(`Could not load property data: ${message}`);
       });
     return () => {
       active = false;
     };
   }, []);
 
-  const handleLogin = (newSession: UserLoginSession) => {
-    setSession(newSession);
+  const handleLoginSubmit = async (
+    usernameOrEmail: string,
+    password?: string,
+  ): Promise<UserLoginSession> => {
+    const userSession = await loginBackend(usernameOrEmail, password);
+    setSession(userSession);
     setCurrentTab('role-view');
-    showToast(`Logged in as @${newSession.username} (${newSession.role})`);
+    showToast(`Welcome, @${userSession.username} (${formatRole(userSession.role)})`);
+    return userSession;
+  };
+
+  const handleSignupSubmit = async (payload: SignupPayload): Promise<UserLoginSession> => {
+    const userSession = await signupBackend(payload);
+    setSession(userSession);
+    setCurrentTab('role-view');
+    await refreshBackendData();
+    showToast(`Account created successfully for @${userSession.username}!`);
+    return userSession;
   };
 
   const handleLogout = () => {
+    logoutBackend();
     setSession(null);
     setCurrentTab('login');
+    showToast('Signed out of session.');
   };
 
   const handleCreateHotel = async (payload: HotelCreatePayload): Promise<Hotel> => {
@@ -97,7 +125,7 @@ export const App: React.FC = () => {
       const hotel = await createBackendHotel(payload);
       setHotels((current) => [...current, hotel]);
       setBackendError(null);
-      showToast(`Hotel "${hotel.name}" saved to PostgreSQL`);
+      showToast(`Hotel "${hotel.name}" created successfully`);
       return hotel;
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not create hotel');
@@ -108,8 +136,8 @@ export const App: React.FC = () => {
   const handleUpdateHotel = async (hotelId: number, data: Partial<Hotel>) => {
     try {
       const updatedHotel = await updateBackendHotel(hotelId, data);
-      setHotels((current) => current.map((hotel) => hotel.id === hotelId ? updatedHotel : hotel));
-      showToast(`Hotel #${hotelId} updated in PostgreSQL`);
+      setHotels((current) => current.map((hotel) => (hotel.id === hotelId ? updatedHotel : hotel)));
+      showToast(`Hotel #${hotelId} updated successfully`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not update hotel');
       throw error;
@@ -117,29 +145,40 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteHotel = async (hotelId: number) => {
-    if (!confirm('Delete this hotel and its rooms, meters, and hotel assignments from PostgreSQL?')) return;
+    if (!confirm('Are you sure you want to permanently delete this hotel and all associated rooms and staff assignments?')) return;
     try {
       await deleteBackendHotel(hotelId);
       await refreshBackendData();
-      showToast(`Hotel #${hotelId} and its associated records were deleted`);
+      showToast(`Hotel #${hotelId} and associated records were deleted`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not delete hotel');
     }
   };
 
-  const handleAddUserToHotel = async (hotelId: number, userData: Omit<User, 'id'>) => {
+  const handleAddUserToHotel = async (hotelId: number, userData: UserCreatePayload) => {
     try {
       const user = await createBackendUser(hotelId, userData);
       setUsers((current) => [...current, user]);
-      showToast(`User @${user.username} saved and bound to Hotel #${hotelId}`);
+      showToast(`Staff member @${user.username} created successfully`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not create user');
       throw error;
     }
   };
 
+  const handleUpdateUser = async (userId: number, payload: UserUpdatePayload) => {
+    try {
+      const updated = await updateBackendUser(userId, payload);
+      setUsers((current) => current.map((u) => (u.id === userId ? updated : u)));
+      showToast(`Staff member @${updated.username} updated successfully`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update user');
+      throw error;
+    }
+  };
+
   const handleDeleteUser = async (userId: number) => {
-    if (!confirm('Delete this user and all hotel assignments from PostgreSQL?')) return;
+    if (!confirm('Are you sure you want to delete this staff member?')) return;
     try {
       await deleteBackendUser(userId);
       setUsers((current) => current.filter((user) => user.id !== userId));
@@ -149,7 +188,25 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleAddRoomToHotel = async (hotelId: number, roomNumber: number, status: Room['status']): Promise<Room> => {
+  const handleConnectEmail = async (userId: number, email: string) => {
+    try {
+      const updated = await connectUserEmail(userId, email);
+      setUsers((current) => current.map((u) => (u.id === userId ? updated : u)));
+      showToast(`Email updated for @${updated.username}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not connect email');
+    }
+  };
+
+  const handleSendTestEmail = async (email: string, username: string) => {
+    return sendTestEmail(email, username);
+  };
+
+  const handleAddRoomToHotel = async (
+    hotelId: number,
+    roomNumber: number,
+    status: Room['status'],
+  ): Promise<Room> => {
     try {
       const { room, meter } = await createBackendRoom({
         hotelId,
@@ -162,7 +219,7 @@ export const App: React.FC = () => {
       setRooms((current) => [...current, room]);
       setMeters((current) => [...current, meter]);
       await refreshBackendData();
-      showToast(`Room ${roomNumber} and its meter saved to PostgreSQL`);
+      showToast(`Room ${roomNumber} added to inventory`);
       return room;
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not create room');
@@ -171,11 +228,11 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteRoom = async (roomId: number) => {
-    if (!confirm('Delete this room and its electricity meter from PostgreSQL?')) return;
+    if (!confirm('Are you sure you want to delete this room and its meter?')) return;
     try {
       await deleteBackendRoom(roomId);
       await refreshBackendData();
-      showToast(`Room #${roomId} and its meter were deleted`);
+      showToast(`Room #${roomId} was deleted`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not delete room');
     }
@@ -184,49 +241,113 @@ export const App: React.FC = () => {
   const handleRoomStatusChange = async (roomId: number, status: Room['status']) => {
     try {
       const updatedRoom = await updateRoomStatus(roomId, status);
-      setRooms((current) => current.map((room) => room.id === roomId ? updatedRoom : room));
-      showToast(`Room #${roomId} status saved`);
+      setRooms((current) => current.map((room) => (room.id === roomId ? updatedRoom : room)));
+      showToast(`Room #${roomId} status updated`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not update room status');
     }
   };
 
-  const handleUpdateMeterReading = async (roomId: number, reading: number) => {
+  const handleUpdateMeterReading = async (
+    roomId: number,
+    reading: number,
+    status: 'Active' | 'Inactive' = 'Active',
+  ) => {
     try {
-      const meter = await saveMeterReading(roomId, reading);
+      const meter = await saveMeterReading(roomId, reading, status);
       setMeters((current) => [
         ...current.filter((existing) => existing.roomId !== roomId),
         meter,
       ]);
-      showToast(`Room #${roomId} meter reading saved`);
+      showToast(`Room #${roomId} meter logged: ${reading.toFixed(1)} kWh (${status})`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not update meter');
+      throw error;
     }
   };
 
-  const handleBackendLogin = async (username: string): Promise<UserLoginSession> => {
-    const user = await loginBackend(username);
-    const newSession = {
-      userId: user.user_id,
-      username: user.username,
-      role: user.role,
-      hotelId: user.hotel_id,
-    };
-    handleLogin(newSession);
-    return newSession;
+  const handleBookRoom = async (
+    roomId: number,
+    bookingData: {
+      guestName: string;
+      guestEmail: string;
+      guestPhone?: string;
+      checkInDate: string;
+      nights: number;
+      totalPrice: number;
+      specialRequests?: string;
+    },
+  ): Promise<BookingReservation> => {
+    try {
+      const updatedRoom = await updateRoomStatus(roomId, 'OCCUPIED');
+      setRooms((current) =>
+        current.map((r) =>
+          r.id === roomId
+            ? {
+                ...updatedRoom,
+                guestName: bookingData.guestName,
+                checkInDate: bookingData.checkInDate,
+              }
+            : r,
+        ),
+      );
+      const hotel = hotels.find((h) => h.id === updatedRoom.hotelId);
+      const reservation: BookingReservation = {
+        id: `HM-${Date.now().toString().slice(-6)}`,
+        roomId,
+        hotelId: updatedRoom.hotelId,
+        hotelName: hotel?.name || 'Hotel Property',
+        roomNumber: updatedRoom.roomNumber,
+        roomType: updatedRoom.roomType,
+        guestName: bookingData.guestName,
+        guestEmail: bookingData.guestEmail,
+        guestPhone: bookingData.guestPhone,
+        checkInDate: bookingData.checkInDate,
+        nights: bookingData.nights,
+        totalPrice: bookingData.totalPrice,
+        specialRequests: bookingData.specialRequests,
+        createdAt: new Date().toISOString(),
+      };
+      showToast(`Reservation confirmed for Room ${updatedRoom.roomNumber}!`);
+      return reservation;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not complete reservation');
+      throw error;
+    }
+  };
+
+  const handleCancelBooking = async (roomId: number, bookingId?: string) => {
+    try {
+      const updatedRoom = await updateRoomStatus(roomId, 'available');
+      setRooms((current) =>
+        current.map((r) =>
+          r.id === roomId
+            ? {
+                ...updatedRoom,
+                guestName: undefined,
+                checkInDate: undefined,
+              }
+            : r,
+        ),
+      );
+      showToast(`Reservation cancelled. Room ${updatedRoom.roomNumber} is now available.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not cancel reservation');
+      throw error;
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
-      {/* Toast */}
+      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-slate-900 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl shadow-xl animate-in slide-in-from-bottom-3 duration-200 text-xs font-semibold">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Navbar */}
+      {/* Navbar with Responsive Percentage Width */}
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -235,70 +356,29 @@ export const App: React.FC = () => {
         onOpenCreateHotel={() => setIsCreateHotelOpen(true)}
       />
 
-      {/* Quick Role Switcher Bar when logged in */}
-      {session && (
-        <div className="bg-slate-900/60 border-b border-slate-800/80 px-4 sm:px-8 py-2 flex flex-wrap items-center justify-between text-xs gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-semibold">Current View:</span>
-            <span className="font-bold text-amber-400 uppercase">{session.role} VIEW</span>
-            <span className="text-slate-500">•</span>
-            <span className="text-slate-300">User: <strong>@{session.username}</strong></span>
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-slate-500 text-[11px] mr-1 hidden sm:inline">Test other role:</span>
-            {(['ADMIN', 'FRONT_DESK', 'PROPERTY_MANAGER', 'MAINTENANCE_ENGINEER'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => {
-                  const matchingUser = users.find((u) => u.role === r) || {
-                    id: 99,
-                    username: r.toLowerCase(),
-                    role: r,
-                    hotelId: 1,
-                  };
-                  handleLogin({
-                    userId: matchingUser.id,
-                    username: matchingUser.username,
-                    role: r,
-                    hotelId: matchingUser.hotelId || 1,
-                  });
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                  session.role === r
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                }`}
-              >
-                {r === 'ADMIN' && 'Admin'}
-                {r === 'FRONT_DESK' && 'Front Desk'}
-                {r === 'PROPERTY_MANAGER' && 'Prop Mgr'}
-                {r === 'MAINTENANCE_ENGINEER' && 'Maintenance'}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main Container with Percentage-based Window Sizing: w-[94%] sm:w-[92%] lg:w-[88%] */}
+      <main className="flex-1 w-[94%] sm:w-[92%] lg:w-[88%] max-w-7xl mx-auto py-8">
         {backendError && (
           <div className="mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
             {backendError}
           </div>
         )}
+
         {!session || currentTab === 'login' ? (
-          <LoginPage users={users} onAuthenticate={handleBackendLogin} />
-        ) : currentTab === 'audit' ? (
-          <DeliverablesAnalysisModal />
-        ) : currentTab === 'api' ? (
-          <ApiDocsView
+          <LoginPage
+            hotels={hotels}
+            onLogin={handleLoginSubmit}
+            onSignup={handleSignupSubmit}
+          />
+        ) : session.role === 'GUEST' ? (
+          <GuestView
+            session={session}
             hotels={hotels}
             rooms={rooms}
-            onCreateHotel={handleCreateHotel}
-            onCreateRoom={(r) => handleAddRoomToHotel(r.hotelId, r.roomNumber, r.status)}
+            onBookRoom={handleBookRoom}
+            onCancelBooking={handleCancelBooking}
           />
-        ) : currentTab === 'role-view' ? (
+        ) : (
           <>
             {session.role === 'ADMIN' && (
               <AdminView
@@ -314,6 +394,9 @@ export const App: React.FC = () => {
                 onDeleteHotel={handleDeleteHotel}
                 onDeleteRoom={handleDeleteRoom}
                 onDeleteUser={handleDeleteUser}
+                onUpdateUser={handleUpdateUser}
+                onConnectEmail={handleConnectEmail}
+                onSendTestEmail={handleSendTestEmail}
               />
             )}
 
@@ -346,33 +429,28 @@ export const App: React.FC = () => {
               />
             )}
           </>
-        ) : null}
+        )}
       </main>
 
-      {/* Footer */}
+      {/* Footer with Responsive Percentage Width */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-5 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-400">Hotel Manager Capstone</span>
+        <div className="w-[94%] sm:w-[92%] lg:w-[88%] max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-slate-400">Hotel Manager Enterprise</span>
             <span>•</span>
             <span className={backendError ? 'text-rose-400' : 'text-emerald-400'}>
-              {backendError ? 'Backend unavailable' : 'PostgreSQL connected'}
+              {backendError ? 'Service Disconnected' : 'Systems Operational'}
             </span>
             <span>•</span>
-            <span>Port 3000 Active</span>
+            <span>Production v1.0</span>
           </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setCurrentTab('audit')}
-              className="text-amber-400 hover:underline font-semibold"
-            >
-              Read Collaborators & Deliverables Audit
-            </button>
+          <div className="text-slate-500 text-[11px]">
+            &copy; {new Date().getFullYear()} Hotel Manager Enterprise. All rights reserved.
           </div>
         </div>
       </footer>
 
-      {/* Modal */}
+      {/* Create Hotel Modal with Percentage-based Sizing */}
       <CreateHotelModal
         isOpen={isCreateHotelOpen}
         onClose={() => setIsCreateHotelOpen(false)}

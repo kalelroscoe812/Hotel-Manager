@@ -26,6 +26,7 @@ class Hotel(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     address: Mapped[str] = mapped_column(String(250), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=True, default="")
+    state: Mapped[str | None] = mapped_column(String(100), nullable=True, default="")
     country: Mapped[str] = mapped_column(String(100), nullable=True, default="")
     logo: Mapped[str | None] = mapped_column(String(500), nullable=True)
     contact_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -43,6 +44,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     other_info: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), default=UserRole.FRONT_DESK.value)
 

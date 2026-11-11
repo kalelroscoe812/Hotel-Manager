@@ -3,10 +3,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from hotel_manager.models import Hotel, User, HotelUser, Room, ElectricityMeter
+from hotel_manager.auth import hash_password, verify_password
 from hotel_manager.schemas import (
     HotelCreate,
     HotelUpdate,
     UserCreate,
+    UserUpdate,
     RoomCreate,
     RoomUpdate,
     ElectricityMeterCreate,
@@ -61,7 +63,9 @@ def delete_hotel(db: Session, hotel_id: int) -> bool:
 
 # ==================== USER SERVICES ====================
 def create_user(db: Session, payload: UserCreate) -> User:
-    user = User(**payload.model_dump(exclude={"hotel_id"}))
+    data = payload.model_dump(exclude={"hotel_id", "password"})
+    password_hash = hash_password(payload.password) if payload.password else None
+    user = User(**data, password_hash=password_hash)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -96,8 +100,75 @@ def delete_user(db: Session, user_id: int) -> bool:
     return True
 
 
+def update_user(db: Session, user_id: int, payload: UserUpdate) -> User | None:
+    user = get_user(db, user_id)
+    if not user:
+        return None
+    data = payload.model_dump(exclude_unset=True)
+    if "password" in data:
+        pw = data.pop("password")
+        if pw:
+            user.password_hash = hash_password(pw)
+    if "hotel_id" in data:
+        hid = data.pop("hotel_id")
+        if hid is not None:
+            bind_user_to_hotel(db, user_id, hid)
+    for field, val in data.items():
+        setattr(user, field, val)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def get_user_by_username(db: Session, username: str) -> User | None:
     return db.scalar(select(User).where(User.username == username))
+
+
+def get_user_by_email(db: Session, email: str) -> User | None:
+    return db.scalar(select(User).where(User.email == email))
+
+
+def get_user_by_username_or_email(db: Session, identifier: str) -> User | None:
+    return db.scalar(
+        select(User).where((User.username == identifier) | (User.email == identifier))
+    )
+
+
+def authenticate_user(
+    db: Session,
+    username_or_email: str,
+    password: str | None = None,
+) -> tuple[User | None, str | None]:
+    """
+    Authenticate user by username or email.
+    If password is provided, verifies against password_hash.
+    If user has no password set (legacy seed), allows login or sets password.
+    Returns (user, error_message).
+    """
+    user = get_user_by_username_or_email(db, username_or_email)
+    if not user:
+        return None, "Invalid credentials: user not found"
+
+    if password is not None and user.password_hash:
+        if not verify_password(password, user.password_hash):
+            return None, "Invalid credentials: incorrect password"
+    elif password is not None and not user.password_hash:
+        # User was seeded without a password hash - update password on first login
+        user.password_hash = hash_password(password)
+        db.commit()
+        db.refresh(user)
+
+    return user, None
+
+
+def connect_user_email(db: Session, user_id: int, email: str) -> User | None:
+    user = get_user(db, user_id)
+    if not user:
+        return None
+    user.email = email
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def bind_user_to_hotel(db: Session, user_id: int, hotel_id: int) -> HotelUser:
