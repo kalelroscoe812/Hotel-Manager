@@ -7,6 +7,7 @@ class HotelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     address: str = Field(min_length=1, max_length=250)
     city: str | None = Field(default="", max_length=100)
+    state: str | None = Field(default="", max_length=100)
     country: str | None = Field(default="", max_length=100)
     logo: str | None = Field(default=None, max_length=500)
     contact_number: str | None = Field(default=None, max_length=50)
@@ -17,6 +18,7 @@ class HotelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=150)
     address: str | None = Field(default=None, min_length=1, max_length=250)
     city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
     country: str | None = Field(default=None, max_length=100)
     logo: str | None = Field(default=None, max_length=500)
     contact_number: str | None = Field(default=None, max_length=50)
@@ -34,27 +36,86 @@ class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
+    email: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, min_length=4, max_length=128)
     other_info: str | None = Field(default=None, max_length=255)
     role: str = Field(default="FRONT_DESK")
     hotel_id: int | None = None
 
 
-class UserRead(UserCreate):
+class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=1, max_length=100)
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, min_length=4, max_length=128)
+    role: str | None = None
+    other_info: str | None = None
+    hotel_id: int | None = None
+
+
+class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    username: str
+    first_name: str
+    last_name: str
+    email: str | None = None
+    other_info: str | None = None
+    role: str
     hotel_id: int | None = None
 
 
 class UserLoginRequest(BaseModel):
     username: str
+    password: str | None = None
 
 
 class UserLoginResponse(BaseModel):
     user_id: int
     username: str
     role: str
+    email: str | None = None
     hotel_id: int | None = None
+    token: str | None = None
+
+
+class UserSignupRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=4, max_length=128)
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    role: str = Field(default="FRONT_DESK")
+    hotel_id: int | None = None
+    other_info: str | None = None
+
+
+class AuthLoginRequest(BaseModel):
+    username_or_email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    username: str
+    email: str | None = None
+    role: str
+    hotel_id: int | None = None
+    first_name: str
+    last_name: str
+
+
+class ConnectEmailRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class SendEmailTestRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    username: str = "User"
 
 
 class UserBindRequest(BaseModel):

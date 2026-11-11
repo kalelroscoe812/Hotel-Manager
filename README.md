@@ -10,16 +10,18 @@ The project provides multi-property management, room inventory tracking, electri
 
 ### Backend
 - **Python 3.11+ / 3.14+**
-- **FastAPI**: REST API layer with OpenAPI 3.1 documentation
+- **FastAPI**: REST API layer
 - **SQLAlchemy 2.0**: ORM persistence layer
 - **Pydantic v2**: Request/response schema validation
+- **PBKDF2-SHA256**: Secure password hashing and tamper-proof access tokens
+- **Resend**: Transactional email connectivity and user onboarding notifications
 - **PostgreSQL 16 & SQLite**: Dual database compatibility (PostgreSQL via Docker Compose or zero-config local SQLite)
-- **Pytest**: Integration and unit test suite
+- **Pytest**: Integration and unit test suite (49 passing tests)
 
 ### Frontend
 - **React 19 & TypeScript**
 - **Vite**: Ultra-fast build tool and dev server
-- **Tailwind CSS v4**: Responsive UI styling
+- **Tailwind CSS v4**: Fluid percentage-based responsive layout and window sizing
 - **Lucide React**: Modern iconography
 
 ---
@@ -32,12 +34,13 @@ The project provides multi-property management, room inventory tracking, electri
 ├─────────────────┤       ├──────────────────────┤       ├────────────────────────┤
 │ id (PK)         │◄─────┐│ id (PK)              │┌─────►│ id (PK)                │
 │ username        │      └│ user_id (FK)         ││      │ name                   │
-│ first_name      │       │ hotel_id (FK)        │┘      │ address                │
-│ last_name       │       └──────────────────────┘       │ city                   │
-│ other_info      │                                      │ country                │
-│ role (ENUM)     │                                      │ contact_number         │
-└─────────────────┘                                      │ total_rooms            │
-                                                         │ logo                   │
+│ email           │       │ hotel_id (FK)        │┘      │ address                │
+│ password_hash   │       └──────────────────────┘       │ city                   │
+│ first_name      │                                      │ state                  │
+│ last_name       │                                      │ country                │
+│ other_info      │                                      │ contact_number         │
+│ role (ENUM)     │                                      │ total_rooms            │
+└─────────────────┘                                      │ logo                   │
                                                          └───────────┬────────────┘
                                                                      │ 1:N
                                                                      ▼
@@ -64,54 +67,63 @@ The project provides multi-property management, room inventory tracking, electri
 
 The React application implements the role-based UI specification:
 
-1. **Authentication Portal (`/login`)**:
-   - Clean login card resolving user session: `[ userid, username, role, hotel_id ]`.
-   - Quick one-click test account pills (`admin`, `frontdesk_jane`, `manager_mike`, `engineer_bob`).
+1. **Authentication & Sign-up Portal (`/login`)**:
+   - Secure authenticated sign-in with username/email and password (PBKDF2 encrypted).
+   - Sign-up workflow allowing new users as well as administrators (`ADMIN`) to register accounts.
+   - Resend email connectivity: automatically dispatches welcome notifications to user emails.
+   - Removed unauthenticated bypasses and instant easy-access pills.
 
-2. **Admin View (`ROLE: ADMIN`)**:
-   - **Create Hotel**: Modal form with Pydantic field constraint validation.
-   - **Searchable & Paginated Table**: `HOTEL NAME | ADDRESS | TOTAL ROOMS | MANAGE`.
-   - **Manage Hotel Drawer**:
-     - *Hotel Details*: Property summary and room counters.
-     - *Add User*: Register and bind staff directly to the hotel.
-     - *Add Room*: Add room number, floor, and pricing.
-     - *Update Hotel*: Live editing of address, phone number, and capacity.
+2. **Administrator Console (`AdminView`)**:
+   - **Create Hotel**: Modal form with State/Province field and Pydantic validation.
+   - **Searchable & Paginated Table**: Hotel Name, Address, Location, Capacity, and Manage actions.
+   - **Manage Property Modal**:
+     - *Property Info*: Property summary, room counts, and staff member directory with Edit and Send Test Email actions.
+     - *Add Staff*: Register and bind staff directly with an initial account password and Resend email.
+     - *Add Room*: Add room number, floor, and pricing to inventory.
+     - *Update Info*: Live editing of address, city, state/province, phone number, and capacity.
+   - **Edit Staff Member Modal**: Live updating of name, username, email, role, active status, and optional password resets.
 
-3. **Front Desk View (`ROLE: FRONT_DESK`)**:
+3. **Front Desk Operations (`FrontDeskView`)**:
    - Filtered view of the staff member's assigned hotel.
    - Room status grid (`available`, `OCCUPIED`, `Maintenance`).
    - 1-click guest check-in and check-out turnover.
 
-4. **Property Manager View (`ROLE: PROPERTY_MANAGER`)**:
+4. **Property Operations (`PropertyManagerView`)**:
    - Property summary and real-time occupancy percentages.
-   - **Electricity Meter Table**: Room #, current reading in kWh, active/inactive status, and log reading update.
+   - **In-App Electricity Meter Modal**: Log meter readings in kWh with quick-add increment buttons (`+1`, `+5`, `+10`, `+25`, `+50` kWh), status toggle, and "Setup Meter" support for unmetered rooms.
 
-5. **Maintenance View (`ROLE: MAINTENANCE_ENGINEER`)**:
+5. **Facilities & Maintenance (`MaintenanceEngineerView`)**:
    - Real-time work order queue of rooms flagged for repair.
    - Electrical diagnostic telemetry.
    - One-click repair resolution (`Maintenance` ➔ `available`).
 
-6. **Interactive API Console (`/api`)**:
-   - Live endpoint executor mirroring Swagger UI (`/docs`).
-   - Copyable cURL and PowerShell (`Invoke-RestMethod`) commands.
+6. **Guest Portal (`GuestView`)**:
+   - Dedicated booking and availability portal strictly accessible for authenticated guest accounts (`role === 'GUEST'`).
+   - Live availability matrix with multi-property selection and room type filtering.
+   - Interactive booking modal with live total price calculation, length of stay, and special requests.
+   - Instant confirmation receipt modal with unique confirmation code (`HM-XXXXXX`).
+   - "My Reservations" tab allowing guests to view active stays and cancel bookings in real-time.
 
 ---
 
 ## API Surface Summary
 
-### System & Auth
+### System & Authentication (`/auth`)
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Health check (`{"service": "hotel-manager", "status": "ok"}`) |
-| `POST` | `/login` | Authenticate username and return user session + hotel binding |
+| `POST` | `/auth/signup` | Register new user or administrator account |
+| `POST` | `/auth/login` | Authenticate with username/email & password, return JWT session token |
+| `GET` | `/auth/me` | Retrieve authenticated user session details |
+| `POST` | `/login` | Legacy endpoint for username-based login session |
 
 ### Hotels (`/hotels`)
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/hotels` | Create a new hotel record |
+| `POST` | `/hotels` | Create a new hotel record (includes `state` / province) |
 | `GET` | `/hotels` | List hotels (supports `page` and `page_size` pagination) |
 | `GET` | `/hotels/{hotel_id}` | Retrieve hotel details by ID |
-| `PUT` | `/hotels/{hotel_id}` | Update hotel details |
+| `PUT` | `/hotels/{hotel_id}` | Update hotel details (name, address, city, state, country, etc.) |
 | `DELETE` | `/hotels/{hotel_id}` | Delete hotel and associated inventory |
 
 ### Rooms (`/rooms`)
@@ -123,19 +135,25 @@ The React application implements the role-based UI specification:
 | `PUT` | `/rooms/{room_id}` | Update room details or change status |
 | `DELETE` | `/rooms/{room_id}` | Delete room record |
 
-### Users & Bindings (`/users`)
+### Users & Staff Management (`/users`)
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/users` | Create user record |
+| `POST` | `/users` | Create user record with password hashing and optional hotel binding |
 | `GET` | `/users` | List users with pagination and `role` filter |
+| `PUT` | `/users/{user_id}` | Update user details, role, status, and reset password |
+| `DELETE` | `/users/{user_id}` | Delete user record |
+| `POST` | `/users/{id}/connect-email` | Connect user email address via Resend |
 | `GET` | `/hotels/{hotel_id}/users/{user_id}` | Retrieve hotel staff record |
 | `POST` | `/hotels/{hotel_id}/users/{user_id}/bind` | Bind a user to a specific hotel |
 
-### Electricity Meters (`/meters`)
+### Electricity Meters (`/meters`) & Email (`/email`)
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/meters` | Log or update electricity meter reading (kWh) |
+| `POST` | `/meters` | Log or update electricity meter reading (kWh) & status |
+| `GET` | `/meters` | List all electricity meters |
 | `GET` | `/rooms/{room_id}/meter` | Get current meter reading for a room |
+| `DELETE` | `/meters/{meter_id}` | Delete electricity meter record |
+| `POST` | `/email/send-test` | Dispatch test notification via Resend SDK |
 
 ---
 
@@ -252,17 +270,12 @@ Pre-configured launch and task profiles are included in `.vscode/`:
 │   └── tasks.json               # Dev server background tasks
 ├── frontend/
 │   ├── components/
-│   │   ├── AdminView.tsx        # Admin hotel management & table
-│   │   ├── ApiDocsView.tsx      # OpenAPI interactive tester
+│   │   ├── AdminView.tsx        # Admin property & staff management
 │   │   ├── CreateHotelModal.tsx # Hotel registration form
-│   │   ├── CreateRoomModal.tsx  # Room inventory form
-│   │   ├── DeliverablesAnalysisModal.tsx # Audit & checklist
-│   │   ├── HotelsView.tsx       # Directory grid
-│   │   ├── LoginPage.tsx        # Portal login UI (spec compliant)
-│   │   ├── Navbar.tsx           # Role badge & switcher
-│   │   ├── Overview.tsx         # Executive dashboard
-│   │   ├── RoleViews.tsx        # Front Desk, Prop Mgr, Maintenance views
-│   │   └── RoomsView.tsx        # Room inventory matrix
+│   │   ├── GuestView.tsx        # Guest room booking & availability portal
+│   │   ├── LoginPage.tsx        # Portal login & signup UI
+│   │   ├── Navbar.tsx           # Role badge & header navigation
+│   │   └── RoleViews.tsx        # Front Desk, Property Mgr, Maintenance views
 │   ├── App.tsx                  # App state & role routing
 │   ├── main.tsx                 # React entry point
 │   ├── api.ts                   # Backend API client for PostgreSQL data

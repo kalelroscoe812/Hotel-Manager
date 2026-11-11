@@ -5,3 +5,72 @@
     @apply bg-slate-950 text-slate-100 min-h-screen selection:bg-amber-500/30 selection:text-amber-200;
   }
 }
+
+/* Button Spacing, Fixed Box Sizes, and Flex Wrapping */
+.btn-fixed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  height: 40px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-fixed-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  height: 32px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-fixed-lg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  height: 44px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-group-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem; /* 10px */
+}
+
+/* Percentage-based Window Sizing */
+.window-modal-pct {
+  width: 92%;
+  max-width: 44rem;
+  max-height: 85vh;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.window-auth-pct {
+  width: 92%;
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+}
