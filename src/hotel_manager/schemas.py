@@ -87,7 +87,6 @@ class UserSignupRequest(BaseModel):
     password: str = Field(min_length=4, max_length=128)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
-    role: str = Field(default="FRONT_DESK")
     hotel_id: int | None = None
     other_info: str | None = None
 
