@@ -203,8 +203,7 @@ def signup_endpoint(payload: UserSignupRequest, db: Session = Depends(get_db)):
             last_name=payload.last_name,
             email=payload.email,
             password=payload.password,
-            role=payload.role,
-            other_info=payload.other_info,
+            role="FRONT_DESK",            other_info=payload.other_info,
             hotel_id=payload.hotel_id,
         ),
     )

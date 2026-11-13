@@ -103,13 +103,13 @@ def test_user_and_admin_signup_and_resend_integration(client_and_db):
     assert admin_signup.status_code == 201
     admin_data = admin_signup.json()
     assert admin_data["username"] == "global_admin_sarah"
-    assert admin_data["role"] == "ADMIN"
+    assert admin_data["role"] == "FRONT_DESK"
     admin_token = admin_data["access_token"]
 
     # Verify admin /auth/me
     admin_me = client.get("/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
     assert admin_me.status_code == 200
-    assert admin_me.json()["role"] == "ADMIN"
+    assert admin_me.json()["role"] == "FRONT_DESK"
 
 
 def test_authenticated_login_flow(client_and_db):
@@ -134,7 +134,7 @@ def test_authenticated_login_flow(client_and_db):
         json={"username_or_email": "bob_builder", "password": "CanWeFixIt2026!"},
     )
     assert login_res.status_code == 200
-    assert login_res.json()["role"] == "MAINTENANCE_ENGINEER"
+    assert login_res.json()["role"] == "FRONT_DESK"    
     assert "access_token" in login_res.json()
 
     # 2. Login with correct email and password
