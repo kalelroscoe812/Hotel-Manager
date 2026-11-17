@@ -6,8 +6,16 @@ import os
 import secrets
 import time
 from typing import Any
+from dotenv import load_dotenv
 
-SECRET_KEY = os.getenv("SECRET_KEY", "hotel-manager-production-secret-key-capstone-2026")
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY must be configured in the environment."
+    )
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7 days
 
 
