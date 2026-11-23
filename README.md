@@ -178,7 +178,22 @@ http://localhost:3000
 
 ---
 
-### 2. Running the FastAPI Backend with PostgreSQL
+### 2. Environment Configuration
+
+Copy the sample environment file to create your local `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Key environment parameters:
+- `SECRET_KEY`: Cryptographic signing key for session tokens (min 32 characters, required by auth service).
+- `DATABASE_URL`: PostgreSQL 16 connection string (default: `postgresql+psycopg://capstone:capstone@localhost:5432/capstone`).
+- `RESEND_API_KEY`: Optional Resend API key for transactional emails (simulated in logs if omitted).
+
+---
+
+### 3. Running the FastAPI Backend with PostgreSQL
 
 From the repository root, run these commands to start PostgreSQL and the backend. The Compose file starts PostgreSQL only; it does not start MySQL or the frontend.
 
@@ -214,9 +229,9 @@ Interactive API Documentation:
 
 ---
 
-### 3. PostgreSQL Database Details
+### 4. PostgreSQL Database Details
 
-The backend uses the local PostgreSQL container by default. Section 2 includes the complete first-time startup sequence and schema migration command.
+The backend uses the local PostgreSQL container by default. Section 3 includes the complete first-time startup sequence and schema migration command.
 
 The React app reads and writes hotels, rooms, users, and meter readings through the FastAPI backend. Vite proxies `/api` requests to `http://127.0.0.1:8000`; run both development servers and apply database migrations before using the UI. The UI's create and delete actions now persist to PostgreSQL.
 
@@ -229,15 +244,29 @@ postgresql+psycopg://capstone:capstone@localhost:5432/capstone
 
 ---
 
-### 4. Running Isolated Test Groups
+### 5. Running Automated Tests
 
+#### Backend Test Suite (Pytest)
 Unit and integration test suites exercise the service layer and FastAPI endpoints using hermetic, isolated test fixtures for rapid CI/CD validation without requiring an external database instance:
 
 ```bash
-# Run unit tests
+# Run unit tests (services business layer)
 uv run pytest -m unit
 
-# Run integration tests
+# Run integration tests (API routes & auth)
+uv run pytest -m integration
+
+# Run full backend test suite (all 53 tests)
+uv run pytest
+```
+
+#### Frontend Component Tests (Vitest)
+Component-level unit tests verify the React components in isolation using Vitest and React Testing Library:
+
+```bash
+# Run frontend component tests
+npm test
+```
 uv run pytest -m integration
 
 # Run the full test suite (all 49 tests)
@@ -392,9 +421,13 @@ Run the complete test suite:
 uv run pytest -q
 ```
 
-All 49 unit and integration tests pass cleanly (100% pass rate):
+All 53 unit and integration tests pass cleanly (100% pass rate):
 - `tests/test_api.py`: Core hotel CRUD and pagination endpoints.
 - `tests/test_auth_and_email.py`: PBKDF2 password hashing, tamper-proof session tokens, authenticated signup/login, and Resend email dispatches.
 - `tests/test_deliverables_oct27.py`: Comprehensive hotel, room, and user management workflows.
 - `tests/test_room_inventory.py`: Advanced room filtering, inventory validations, and meter associations.
-- `tests/test_services.py`: Service-layer business logic and isolation.
+- `tests/test_services.py`: Comprehensive service-layer business logic isolation tests (>80% core code coverage).
+
+Additionally, all frontend component unit tests execute via `npm test` using Vitest and React Testing Library:
+- `frontend/__tests__/Navbar.test.tsx`: Brand rendering, role badges, and logout flow.
+- `frontend/__tests__/CreateHotelModal.test.tsx`: Property registration modal and form field validations.

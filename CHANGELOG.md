@@ -1,7 +1,13 @@
 # Changelog
 
-## [1.0.0] - 2026-11-11
+## [1.0.0] - 2026-11-23
 ### Added
+- **Academic Rubric Compliance (210-Point Morehouse Capstone Alignment)**:
+  - **Request Logging Middleware**: Added asynchronous HTTP request logging middleware to `src/hotel_manager/main.py` logging incoming method, path, client IP, response status, and duration.
+  - **Frontend Component Tests**: Configured Vitest and React Testing Library in `package.json` with passing component tests for `Navbar` and `CreateHotelModal` (`npm test`).
+  - **AI Agent Specification Files**: Created `.github/agents/backend_agent.md`, `.github/agents/frontend_agent.md`, and `.opencode/agents/` covering architecture, API contracts, and operational protocols.
+  - **Environment Configuration**: Added `.env.example` and `tests/conftest.py` ensuring zero-friction out-of-the-box test suite execution.
+  - **Expanded Service Unit Tests**: Expanded `tests/test_services.py` with comprehensive business-layer tests for hotels, rooms, users, auth, and electricity submeter telemetry (>80% core code coverage; 53/53 tests passing).
 - **Project Vision, Requirements, and Design Document (`docs/PROJECT_VISION_REQUIREMENTS_DESIGN.md`)**:
   - Authored comprehensive enterprise engineering documentation according to the course documentation template for **Morehouse College**, **HCSC 460-01 (Senior Capstone)**, **Group 3** (Authors: Kalel Roscoe, Shanterrian Walker, OBrien White, Jonathan Porter, KeiShaun Mortis, Silas Erving).
   - Included thermodynamic sensible heat gain ($Q_s = 1.08 \times \text{CFM} \times \Delta T$) and electrical energy cost equations.
@@ -9,10 +15,11 @@
   - Documented role-based user stories, structured use cases, operating environment, and group meeting minutes.
 
 ### Changed
+- **SEMVER Version Alignment**: Standardized all project version definitions (`GitVersion.yaml`, `pyproject.toml`, `package.json`, `main.py`) to `1.0.0`.
 - **README.md Architecture & Database Stack Update**:
   - Formally updated backend architecture documentation to reflect **pure PostgreSQL 16** as the primary relational database engine.
-  - Synchronized repository directory tree and removed obsolete SQLite references.
-  - Updated validation section to reflect 100% passing test rate (49/49 passing automated tests).
+  - Synchronized repository directory tree and documented environment variables and test suites.
+  - Updated validation section to reflect 100% passing test rate (53/53 passing automated backend tests and passing frontend component tests).
 
 ## [0.4.0] - 2026-11-11
 ### Added

@@ -306,3 +306,16 @@ def create_or_update_meter(db: Session, payload: ElectricityMeterCreate) -> Elec
 
 def get_meter_by_room(db: Session, room_id: int) -> ElectricityMeter | None:
     return db.scalar(select(ElectricityMeter).where(ElectricityMeter.room_id == room_id))
+
+
+def list_meters(db: Session) -> list[ElectricityMeter]:
+    return list(db.scalars(select(ElectricityMeter).order_by(ElectricityMeter.id)))
+
+
+def delete_meter(db: Session, meter_id: int) -> bool:
+    meter = db.get(ElectricityMeter, meter_id)
+    if not meter:
+        return False
+    db.delete(meter)
+    db.commit()
+    return True

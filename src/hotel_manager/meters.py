@@ -16,7 +16,7 @@ router = APIRouter(tags=["meters"])
 
 @router.get("/meters", response_model=list[ElectricityMeterRead])
 def list_meters_endpoint(db: Session = Depends(get_db)):
-    return list(db.scalars(select(ElectricityMeter).order_by(ElectricityMeter.id)))
+    return services.list_meters(db)
 
 
 @router.post("/meters", response_model=ElectricityMeterRead)
@@ -60,9 +60,6 @@ def get_room_meter_endpoint(
 
 @router.delete("/meters/{meter_id}", status_code=204)
 def delete_meter_endpoint(meter_id: int, db: Session = Depends(get_db)):
-    meter = db.get(ElectricityMeter, meter_id)
-    if meter is None:
+    if not services.delete_meter(db, meter_id):
         raise HTTPException(status_code=404, detail="Electricity meter not found")
-    db.delete(meter)
-    db.commit()
     return Response(status_code=204)
