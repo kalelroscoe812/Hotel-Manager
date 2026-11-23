@@ -23,6 +23,9 @@ import {
   CalendarCheck,
   Ban,
   ShieldCheck,
+  ArrowUpDown,
+  RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface GuestViewProps {
@@ -56,11 +59,66 @@ export const GuestView: React.FC<GuestViewProps> = ({
   // Navigation tab: 'explore' vs 'my-bookings'
   const [activeTab, setActiveTab] = useState<'explore' | 'my-bookings'>('explore');
 
-  // Filters
+  // Enhanced Hotel & Room Filters
+  const [selectedLocation, setSelectedLocation] = useState<string>('ALL');
   const [selectedHotelId, setSelectedHotelId] = useState<number | 'ALL'>('ALL');
   const [selectedRoomType, setSelectedRoomType] = useState<string>('ALL');
   const [availabilityOnly, setAvailabilityOnly] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [pricePreset, setPricePreset] = useState<'ALL' | 'under150' | '150-250' | '250-400' | '400plus' | 'custom'>('ALL');
+  const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'room-asc' | 'hotel-asc'>('featured');
+
+  // Distinct locations from hotels
+  const locations = React.useMemo(() => {
+    const locSet = new Set<string>();
+    hotels.forEach((h) => {
+      const loc = [h.city, h.state].filter(Boolean).join(', ');
+      if (loc) locSet.add(loc);
+      else if (h.city) locSet.add(h.city);
+      else if (h.state) locSet.add(h.state);
+    });
+    return Array.from(locSet).sort();
+  }, [hotels]);
+
+  const applyPricePreset = (preset: 'ALL' | 'under150' | '150-250' | '250-400' | '400plus') => {
+    setPricePreset(preset);
+    if (preset === 'ALL') {
+      setMinPrice('');
+      setMaxPrice('');
+    } else if (preset === 'under150') {
+      setMinPrice('');
+      setMaxPrice('150');
+    } else if (preset === '150-250') {
+      setMinPrice('150');
+      setMaxPrice('250');
+    } else if (preset === '250-400') {
+      setMinPrice('250');
+      setMaxPrice('400');
+    } else if (preset === '400plus') {
+      setMinPrice('400');
+      setMaxPrice('');
+    }
+  };
+
+  const handleCustomPriceChange = (minVal: string, maxVal: string) => {
+    setMinPrice(minVal);
+    setMaxPrice(maxVal);
+    setPricePreset('custom');
+  };
+
+  const handleClearFilters = () => {
+    setSelectedLocation('ALL');
+    setSelectedHotelId('ALL');
+    setSelectedRoomType('ALL');
+    setAvailabilityOnly(true);
+    setSearchQuery('');
+    setMinPrice('');
+    setMaxPrice('');
+    setPricePreset('ALL');
+    setSortBy('featured');
+  };
 
   // Booking Modal State
   const [bookingRoom, setBookingRoom] = useState<Room | null>(null);
@@ -106,36 +164,95 @@ export const GuestView: React.FC<GuestViewProps> = ({
     }
   }, [session]);
 
-  // Filtered rooms
-  const filteredRooms = rooms.filter((room) => {
-    // Hotel filter
-    if (selectedHotelId !== 'ALL' && room.hotelId !== selectedHotelId) {
-      return false;
-    }
-    // Room type filter
-    if (selectedRoomType !== 'ALL') {
-      const type = (room.roomType || 'Standard').toLowerCase();
-      if (type !== selectedRoomType.toLowerCase()) return false;
-    }
-    // Availability only
-    if (availabilityOnly && room.status !== 'available') {
-      return false;
-    }
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+  // Filtered & Sorted Rooms
+  const filteredRooms = React.useMemo(() => {
+    const list = rooms.filter((room) => {
       const hotel = hotels.find((h) => h.id === room.hotelId);
-      const matchesRoom = String(room.roomNumber).includes(q);
-      const matchesType = (room.roomType || 'Standard').toLowerCase().includes(q);
-      const matchesHotel = hotel?.name.toLowerCase().includes(q) || false;
-      const matchesCity = hotel?.city?.toLowerCase().includes(q) || false;
-      const matchesState = hotel?.state?.toLowerCase().includes(q) || false;
-      if (!matchesRoom && !matchesType && !matchesHotel && !matchesCity && !matchesState) {
+
+      // Location filter (city, state, or combined)
+      if (selectedLocation !== 'ALL') {
+        const hotelLoc = [hotel?.city, hotel?.state].filter(Boolean).join(', ');
+        const matchesLoc =
+          hotelLoc.toLowerCase() === selectedLocation.toLowerCase() ||
+          (hotel?.city && hotel.city.toLowerCase() === selectedLocation.toLowerCase()) ||
+          (hotel?.state && hotel.state.toLowerCase() === selectedLocation.toLowerCase());
+        if (!matchesLoc) return false;
+      }
+
+      // Hotel Property filter
+      if (selectedHotelId !== 'ALL' && room.hotelId !== selectedHotelId) {
         return false;
       }
-    }
-    return true;
-  });
+
+      // Room type filter
+      if (selectedRoomType !== 'ALL') {
+        const type = (room.roomType || 'Standard').toLowerCase();
+        if (type !== selectedRoomType.toLowerCase()) return false;
+      }
+
+      // Availability only
+      if (availabilityOnly && room.status !== 'available') {
+        return false;
+      }
+
+      // Price range filter
+      const price = room.pricePerNight ?? 200;
+      if (minPrice.trim() !== '' && !isNaN(Number(minPrice)) && price < Number(minPrice)) {
+        return false;
+      }
+      if (maxPrice.trim() !== '' && !isNaN(Number(maxPrice)) && price > Number(maxPrice)) {
+        return false;
+      }
+
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesRoom = String(room.roomNumber).includes(q);
+        const matchesType = (room.roomType || 'Standard').toLowerCase().includes(q);
+        const matchesHotel = hotel?.name.toLowerCase().includes(q) || false;
+        const matchesCity = hotel?.city?.toLowerCase().includes(q) || false;
+        const matchesState = hotel?.state?.toLowerCase().includes(q) || false;
+        if (!matchesRoom && !matchesType && !matchesHotel && !matchesCity && !matchesState) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Sorting
+    return [...list].sort((a, b) => {
+      const hotelA = hotels.find((h) => h.id === a.hotelId);
+      const hotelB = hotels.find((h) => h.id === b.hotelId);
+      const priceA = a.pricePerNight ?? 200;
+      const priceB = b.pricePerNight ?? 200;
+
+      switch (sortBy) {
+        case 'price-asc':
+          return priceA - priceB;
+        case 'price-desc':
+          return priceB - priceA;
+        case 'room-asc':
+          return a.roomNumber - b.roomNumber;
+        case 'hotel-asc':
+          return (hotelA?.name || '').localeCompare(hotelB?.name || '');
+        case 'featured':
+        default:
+          return 0;
+      }
+    });
+  }, [
+    rooms,
+    hotels,
+    selectedLocation,
+    selectedHotelId,
+    selectedRoomType,
+    availabilityOnly,
+    minPrice,
+    maxPrice,
+    searchQuery,
+    sortBy,
+  ]);
 
   // Stats
   const totalAvailable = rooms.filter((r) => r.status === 'available').length;
@@ -298,11 +415,12 @@ export const GuestView: React.FC<GuestViewProps> = ({
       {/* 3. EXPLORE & BOOK VIEW */}
       {activeTab === 'explore' && (
         <div className="space-y-4">
-          {/* Search & Filter Bar with CSS Flex Wrapping & Fixed Box Sizes */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+          {/* Search, Location, Price & Filter Control Center */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+            {/* Top Row: Search, Location, Property, Room Type & Sorting */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               {/* Search Input */}
-              <div className="relative flex-1 min-w-[240px] max-w-md">
+              <div className="relative flex-1 min-w-[220px] max-w-sm">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -313,17 +431,33 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 />
               </div>
 
-              {/* Quick Filters */}
+              {/* Core Selectors */}
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* Hotel Selector */}
+                {/* Location Filter Dropdown */}
+                <div className="relative">
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                  >
+                    <option value="ALL">All Locations ({locations.length})</option>
+                    {locations.map((loc) => (
+                      <option key={loc} value={loc}>
+                        📍 {loc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Hotel Property Selector */}
                 <select
                   value={selectedHotelId}
                   onChange={(e) =>
                     setSelectedHotelId(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))
                   }
-                  className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition"
+                  className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition cursor-pointer"
                 >
-                  <option value="ALL">All Hotel Properties ({hotels.length})</option>
+                  <option value="ALL">All Properties ({hotels.length})</option>
                   {hotels.map((h) => (
                     <option key={h.id} value={h.id}>
                       {h.name} {h.city ? `(${h.city})` : ''}
@@ -335,21 +469,133 @@ export const GuestView: React.FC<GuestViewProps> = ({
                 <select
                   value={selectedRoomType}
                   onChange={(e) => setSelectedRoomType(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition"
+                  className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition cursor-pointer"
                 >
                   <option value="ALL">All Room Types</option>
-                  <option value="Standard">Standard Rooms</option>
-                  <option value="Deluxe">Deluxe Rooms</option>
-                  <option value="Suite">Suites</option>
-                  <option value="Penthouse">Penthouse</option>
+                  <option value="Standard">Standard</option>
+                  <option value="Deluxe">Deluxe</option>
+                  <option value="Suite">Suite</option>
                   <option value="Executive">Executive</option>
+                  <option value="Penthouse">Penthouse</option>
                 </select>
 
-                {/* Availability Only Toggle */}
+                {/* Sort Order Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer"
+                  >
+                    <option value="featured" className="bg-slate-950">Sort: Featured</option>
+                    <option value="price-asc" className="bg-slate-950">Price: Low to High</option>
+                    <option value="price-desc" className="bg-slate-950">Price: High to Low</option>
+                    <option value="room-asc" className="bg-slate-950">Room Number: Ascending</option>
+                    <option value="hotel-asc" className="bg-slate-950">Hotel Name: A to Z</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Row: Price Filter Range, Preset Pills & Availability Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+              {/* Price Preset Pills & Custom Inputs */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mr-1">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Price:</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => applyPricePreset('ALL')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition border ${
+                    pricePreset === 'ALL'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPricePreset('under150')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition border ${
+                    pricePreset === 'under150'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  &lt; $150
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPricePreset('150-250')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition border ${
+                    pricePreset === '150-250'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  $150 - $250
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPricePreset('250-400')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition border ${
+                    pricePreset === '250-400'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  $250 - $400
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPricePreset('400plus')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition border ${
+                    pricePreset === '400plus'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  $400+
+                </button>
+
+                {/* Custom Min/Max Inputs */}
+                <div className="flex items-center gap-1 ml-1 text-xs font-mono">
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-[11px]">$</span>
+                    <input
+                      type="number"
+                      placeholder="Min"
+                      min="0"
+                      value={minPrice}
+                      onChange={(e) => handleCustomPriceChange(e.target.value, maxPrice)}
+                      className="w-16 bg-slate-950 border border-slate-800 rounded-lg pl-5 pr-1.5 py-1 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <span className="text-slate-600">-</span>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-[11px]">$</span>
+                    <input
+                      type="number"
+                      placeholder="Max"
+                      min="0"
+                      value={maxPrice}
+                      onChange={(e) => handleCustomPriceChange(minPrice, e.target.value)}
+                      className="w-16 bg-slate-950 border border-slate-800 rounded-lg pl-5 pr-1.5 py-1 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Availability Toggle & Reset */}
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setAvailabilityOnly((prev) => !prev)}
-                  className={`inline-flex items-center justify-center min-w-[130px] h-9 px-3 text-xs font-semibold rounded-xl transition shrink-0 border ${
+                  className={`inline-flex items-center justify-center min-w-[130px] h-8 px-3 text-xs font-semibold rounded-xl transition shrink-0 border ${
                     availabilityOnly
                       ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
@@ -358,7 +604,111 @@ export const GuestView: React.FC<GuestViewProps> = ({
                   <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
                   <span>{availabilityOnly ? 'Available Only' : 'All Statuses'}</span>
                 </button>
+
+                {(searchQuery ||
+                  selectedLocation !== 'ALL' ||
+                  selectedHotelId !== 'ALL' ||
+                  selectedRoomType !== 'ALL' ||
+                  !availabilityOnly ||
+                  minPrice ||
+                  maxPrice ||
+                  sortBy !== 'featured') && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="inline-flex items-center justify-center h-8 px-2.5 text-xs font-semibold text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition"
+                    title="Reset all active filters"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                    <span>Reset</span>
+                  </button>
+                )}
               </div>
+            </div>
+
+            {/* Active Filters Summary Chips */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-800/60 text-[11px]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slate-400 font-medium">
+                  Showing <strong className="text-white">{filteredRooms.length}</strong> of{' '}
+                  {rooms.length} rooms
+                </span>
+
+                {selectedLocation !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                    <span>Location: {selectedLocation}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLocation('ALL')}
+                      className="hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+
+                {selectedHotelId !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                    <span>
+                      Property: {hotels.find((h) => h.id === selectedHotelId)?.name || selectedHotelId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedHotelId('ALL')}
+                      className="hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+
+                {selectedRoomType !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                    <span>Type: {selectedRoomType}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRoomType('ALL')}
+                      className="hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+
+                {(minPrice || maxPrice) && (
+                  <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono">
+                    <span>
+                      Rate: ${minPrice || '0'} - ${maxPrice || '∞'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => applyPricePreset('ALL')}
+                      className="hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 bg-blue-500/10 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full">
+                    <span>Query: "{searchQuery}"</span>
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              {sortBy !== 'featured' && (
+                <span className="text-slate-400 font-mono">
+                  Sorted by: <span className="text-amber-400 font-medium">{sortBy}</span>
+                </span>
+              )}
             </div>
           </div>
 
@@ -366,11 +716,21 @@ export const GuestView: React.FC<GuestViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredRooms.length === 0 ? (
               <div className="col-span-full py-16 text-center text-slate-400 text-xs bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
-                <BedDouble className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                <p className="font-semibold text-white text-sm">No rooms found</p>
-                <p className="mt-1 text-slate-500">
-                  Try adjusting your hotel filter, search terms, or unchecking "Available Only".
+                <BedDouble className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <p className="font-bold text-white text-base">No matching rooms found</p>
+                <p className="mt-1 text-slate-400 max-w-md mx-auto">
+                  No rooms matched your current filters (location, price range, room type, or search keyword).
                 </p>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="inline-flex items-center justify-center h-9 px-4 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-md shadow-amber-500/20"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Reset All Filters</span>
+                  </button>
+                </div>
               </div>
             ) : (
               filteredRooms.map((room) => {

@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Hotel, Room, User, UserCreatePayload, UserUpdatePayload, formatRole } from '../types';
+import {
+  Hotel,
+  Room,
+  RoomUpdatePayload,
+  User,
+  UserCreatePayload,
+  UserUpdatePayload,
+  formatRole,
+} from '../types';
 import {
   Building2,
   Plus,
@@ -15,6 +23,7 @@ import {
   Lock,
   BedDouble,
   UserPlus,
+  DollarSign,
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -24,11 +33,19 @@ interface AdminViewProps {
   onOpenCreateHotel: () => void;
   onUpdateHotel: (hotelId: number, data: Partial<Hotel>) => Promise<void>;
   onAddUserToHotel: (hotelId: number, user: UserCreatePayload) => Promise<void>;
-  onAddRoomToHotel: (hotelId: number, roomNumber: number, status: Room['status']) => Promise<void>;
+  onAddRoomToHotel: (
+    hotelId: number,
+    roomNumber: number,
+    status: Room['status'],
+    roomType?: Room['roomType'],
+    floor?: number,
+    pricePerNight?: number,
+  ) => Promise<void>;
   onDeleteHotel: (hotelId: number) => Promise<void>;
   onDeleteRoom: (roomId: number) => Promise<void>;
   onDeleteUser: (userId: number) => Promise<void>;
   onUpdateUser?: (userId: number, data: UserUpdatePayload) => Promise<void>;
+  onUpdateRoom?: (roomId: number, data: RoomUpdatePayload) => Promise<Room | void>;
   onConnectEmail?: (userId: number, email: string) => Promise<void>;
   onSendTestEmail?: (email: string, username: string) => Promise<any>;
 }
@@ -45,6 +62,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onDeleteRoom,
   onDeleteUser,
   onUpdateUser,
+  onUpdateRoom,
   onSendTestEmail,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,6 +127,25 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const [newRoomNumber, setNewRoomNumber] = useState<number>(101);
   const [newRoomStatus, setNewRoomStatus] = useState<Room['status']>('available');
+  const [newRoomType, setNewRoomType] = useState<Room['roomType']>('Standard');
+  const [newRoomFloor, setNewRoomFloor] = useState<number>(1);
+  const [newRoomPrice, setNewRoomPrice] = useState<number>(200);
+
+  // Edit Room State (Pricing and Room Types)
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [editRoomForm, setEditRoomForm] = useState<{
+    roomNumber: number;
+    roomType: Room['roomType'] | string;
+    pricePerNight: number;
+    floor: number;
+    status: Room['status'];
+  }>({
+    roomNumber: 101,
+    roomType: 'Standard',
+    pricePerNight: 200,
+    floor: 1,
+    status: 'available',
+  });
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState<number | null>(null);
@@ -245,12 +282,51 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const openEditRoomModal = (r: Room) => {
+    setActionError('');
+    setActionNotice('');
+    setEditingRoom(r);
+    setEditRoomForm({
+      roomNumber: r.roomNumber,
+      roomType: r.roomType || 'Standard',
+      pricePerNight: r.pricePerNight !== undefined ? Number(r.pricePerNight) : 200,
+      floor: r.floor !== undefined ? r.floor : 1,
+      status: r.status,
+    });
+  };
+
+  const handleEditRoomSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRoom || !onUpdateRoom) return;
+    setActionError('');
+    try {
+      await onUpdateRoom(editingRoom.id, {
+        roomNumber: Number(editRoomForm.roomNumber),
+        roomType: editRoomForm.roomType,
+        pricePerNight: Number(editRoomForm.pricePerNight),
+        floor: Number(editRoomForm.floor),
+        status: editRoomForm.status,
+      });
+      setActionNotice(`Room ${editRoomForm.roomNumber} updated successfully.`);
+      setEditingRoom(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not update room');
+    }
+  };
+
   const handleAddRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!managedHotel) return;
     setActionError('');
     try {
-      await onAddRoomToHotel(managedHotel.id, Number(newRoomNumber), newRoomStatus);
+      await onAddRoomToHotel(
+        managedHotel.id,
+        Number(newRoomNumber),
+        newRoomStatus,
+        newRoomType,
+        Number(newRoomFloor),
+        Number(newRoomPrice),
+      );
       setNewRoomNumber((prev) => prev + 1);
       setActionNotice(`Room ${newRoomNumber} added to inventory.`);
       setActiveManageTab('details');
@@ -621,35 +697,64 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                       Rooms in this Property ({hotelRooms.length})
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {hotelRooms.map((r) => (
-                        <div
-                          key={r.id}
-                          className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
-                        >
-                          <div>
-                            <span className="font-bold text-white block">Room {r.roomNumber}</span>
-                            <span
-                              className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                                r.status === 'available'
-                                  ? 'text-emerald-400 bg-emerald-500/10'
-                                  : r.status === 'OCCUPIED'
-                                  ? 'text-blue-400 bg-blue-500/10'
-                                  : 'text-rose-400 bg-rose-500/10'
-                              }`}
-                            >
-                              {r.status}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void onDeleteRoom(r.id)}
-                            className="inline-flex items-center justify-center min-w-[65px] h-7 px-2 rounded-lg border border-rose-500/30 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10 transition shrink-0 box-border"
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                      {hotelRooms.length === 0 ? (
+                        <p className="text-slate-500">No rooms in this property yet.</p>
+                      ) : (
+                        hotelRooms.map((r) => (
+                          <div
+                            key={r.id}
+                            className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-2.5 hover:border-slate-700 transition"
                           >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white text-sm">Room {r.roomNumber}</span>
+                                <span
+                                  className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                                    r.status === 'available'
+                                      ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/30'
+                                      : r.status === 'OCCUPIED'
+                                      ? 'text-blue-400 bg-blue-500/10 border border-blue-500/30'
+                                      : 'text-rose-400 bg-rose-500/10 border border-rose-500/30'
+                                  }`}
+                                >
+                                  {r.status}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                                <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold">
+                                  {r.roomType || 'Standard'}
+                                </span>
+                                <span className="font-mono text-emerald-400 font-bold">
+                                  ${r.pricePerNight ?? 200}/night
+                                </span>
+                                {r.floor !== undefined && (
+                                  <span className="text-slate-500">• Floor {r.floor}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {onUpdateRoom && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditRoomModal(r)}
+                                  className="inline-flex items-center justify-center min-w-[65px] h-7 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20 transition shrink-0 box-border"
+                                >
+                                  <Edit2 className="w-3 h-3 mr-1" />
+                                  <span>Edit</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => void onDeleteRoom(r.id)}
+                                className="inline-flex items-center justify-center min-w-[65px] h-7 px-2.5 rounded-lg border border-rose-500/30 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10 transition shrink-0 box-border"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
@@ -769,19 +874,64 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <p className="text-slate-400">
                     Add a room to <strong>{managedHotel.name}</strong> inventory.
                   </p>
-                  <div>
-                    <label className="text-slate-300 font-semibold block mb-1">Room Number *</label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={newRoomNumber}
-                      onChange={(e) => setNewRoomNumber(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Room Number *</label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={newRoomNumber}
+                        onChange={(e) => setNewRoomNumber(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Floor</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newRoomFloor}
+                        onChange={(e) => setNewRoomFloor(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                      />
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Room Type *</label>
+                      <select
+                        value={newRoomType}
+                        onChange={(e) => setNewRoomType(e.target.value as any)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                      >
+                        <option value="Standard">Standard</option>
+                        <option value="Deluxe">Deluxe</option>
+                        <option value="Suite">Suite</option>
+                        <option value="Executive">Executive</option>
+                        <option value="Penthouse">Penthouse</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Price Per Night ($) *</label>
+                      <div className="relative">
+                        <DollarSign className="w-4 h-4 text-emerald-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          step="0.01"
+                          value={newRoomPrice}
+                          onChange={(e) => setNewRoomPrice(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-2.5 py-2.5 text-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="text-slate-300 font-semibold block mb-1">Status *</label>
+                    <label className="text-slate-300 font-semibold block mb-1">Initial Status *</label>
                     <select
                       value={newRoomStatus}
                       onChange={(e) => setNewRoomStatus(e.target.value as any)}
@@ -792,6 +942,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       <option value="Maintenance">Maintenance</option>
                     </select>
                   </div>
+
                   <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-end gap-3">
                     <button
                       type="submit"
@@ -1004,6 +1155,127 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}
+                  className="inline-flex items-center justify-center min-w-[90px] h-9 px-4 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 box-border border border-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center min-w-[130px] h-9 px-4 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-md shadow-amber-500/20 shrink-0 box-border"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 5. Edit Room Modal with Percentage-based Window Sizing */}
+      {editingRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-[92%] sm:w-[84%] md:w-[60%] lg:w-[48%] max-w-lg p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+                  Room Inventory Edit
+                </span>
+                <h3 className="text-base font-bold text-white mt-1">
+                  Edit Room {editingRoom.roomNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingRoom(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditRoomSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Room Number *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={editRoomForm.roomNumber}
+                    onChange={(e) =>
+                      setEditRoomForm({ ...editRoomForm, roomNumber: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Floor</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editRoomForm.floor}
+                    onChange={(e) =>
+                      setEditRoomForm({ ...editRoomForm, floor: Number(e.target.value) })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Room Type *</label>
+                  <select
+                    value={editRoomForm.roomType}
+                    onChange={(e) =>
+                      setEditRoomForm({ ...editRoomForm, roomType: e.target.value as any })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  >
+                    <option value="Standard">Standard</option>
+                    <option value="Deluxe">Deluxe</option>
+                    <option value="Suite">Suite</option>
+                    <option value="Executive">Executive</option>
+                    <option value="Penthouse">Penthouse</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">Price Per Night ($) *</label>
+                  <div className="relative">
+                    <DollarSign className="w-4 h-4 text-emerald-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={editRoomForm.pricePerNight}
+                      onChange={(e) =>
+                        setEditRoomForm({ ...editRoomForm, pricePerNight: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-2.5 py-2.5 text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Availability Status *</label>
+                <select
+                  value={editRoomForm.status}
+                  onChange={(e) =>
+                    setEditRoomForm({ ...editRoomForm, status: e.target.value as any })
+                  }
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                >
+                  <option value="available">Available</option>
+                  <option value="OCCUPIED">Occupied</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingRoom(null)}
                   className="inline-flex items-center justify-center min-w-[90px] h-9 px-4 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 box-border border border-slate-800"
                 >
                   Cancel

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0] - 2026-11-23
+### Added
+- **Advanced Guest Filtering & Discovery Engine (`GuestView.tsx`)**:
+  - **Location-Based Filtering**: Dynamic location selector listing all available destinations (`City, State`) across the hotel portfolio.
+  - **Comprehensive Price Filtering**: Dual-mode price controls with quick budget preset pills (`All`, `< $150`, `$150 - $250`, `$250 - $400`, `$400+`) and custom numeric min/max rate inputs.
+  - **Multi-Parameter Sorting**: Sort catalog by Featured, Price (Low to High), Price (High to Low), Room Number (Ascending), or Hotel Name (A-Z).
+  - **Active Filter Chips & Reset**: Dismissible active filter badges with live room counter (`Showing X of Y rooms`) and instantaneous "Reset All Filters" action.
+  - **Restorative Empty State**: Intuitive empty state when no rooms match search parameters, featuring a direct "Reset All Filters" CTA.
+- **Admin Room Pricing & Room Type Management (`AdminView.tsx`)**:
+  - **Room Inventory Display**: Enhanced property rooms list showing room number, floor, room type badge, nightly price tag, and live status badge.
+  - **Edit Room Modal**: Interactive modal enabling administrators to modify `nightly_price`, `room_type`, `floor`, and `status` in real time via `PUT /rooms/{room_id}`.
+  - **Configurable Room Creation**: Enhanced Add Room form to configure room type, nightly price, and floor upon inventory registration.
+  - **Frontend API Client**: Added `RoomUpdatePayload` interface and `updateRoom` function in `frontend/api.ts`.
+- **Frontend Test Suite Expansion**:
+  - Added `frontend/__tests__/GuestView.test.tsx` testing location filtering, price presets, and empty state recovery.
+  - Added `frontend/__tests__/AdminView.test.tsx` testing room details display, edit room modal trigger, and price/type updates.
+  - 100% test passing rate across both backend (53/53 pytest tests) and frontend (12/12 vitest tests).
+
 ## [1.0.0] - 2026-11-23
 ### Added
 - **Academic Rubric Compliance (210-Point Morehouse Capstone Alignment)**:

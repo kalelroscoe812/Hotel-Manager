@@ -4,6 +4,7 @@ import {
   HotelCreatePayload,
   Room,
   RoomCreatePayload,
+  RoomUpdatePayload,
   SignupPayload,
   User,
   UserCreatePayload,
@@ -290,16 +291,30 @@ export async function createRoom(
   return { room, meter };
 }
 
+export async function updateRoom(
+  roomId: number,
+  payload: RoomUpdatePayload,
+): Promise<Room> {
+  const body: Record<string, any> = {};
+  if (payload.roomNumber !== undefined) body.room_number = payload.roomNumber;
+  if (payload.status !== undefined) body.status = payload.status;
+  if (payload.floor !== undefined) body.floor = payload.floor;
+  if (payload.pricePerNight !== undefined) body.nightly_price = payload.pricePerNight;
+  if (payload.roomType !== undefined) body.room_type = payload.roomType;
+
+  return toRoom(
+    await request<ApiRoom>(`/rooms/${roomId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 export async function updateRoomStatus(
   roomId: number,
   status: Room['status'],
 ): Promise<Room> {
-  return toRoom(
-    await request<ApiRoom>(`/rooms/${roomId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    }),
-  );
+  return updateRoom(roomId, { status });
 }
 
 export function deleteRoom(roomId: number): Promise<void> {

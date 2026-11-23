@@ -15,6 +15,7 @@ import {
   SignupPayload,
   UserCreatePayload,
   UserUpdatePayload,
+  RoomUpdatePayload,
   BookingReservation,
   formatRole,
 } from './types';
@@ -34,6 +35,7 @@ import {
   sendTestEmail,
   saveMeterReading,
   updateHotel as updateBackendHotel,
+  updateRoom as updateBackendRoom,
   updateRoomStatus,
   updateUser as updateBackendUser,
 } from './api';
@@ -206,15 +208,18 @@ export const App: React.FC = () => {
     hotelId: number,
     roomNumber: number,
     status: Room['status'],
+    roomType?: Room['roomType'],
+    floor?: number,
+    pricePerNight?: number,
   ): Promise<Room> => {
     try {
       const { room, meter } = await createBackendRoom({
         hotelId,
         roomNumber,
         status,
-        roomType: 'Standard',
-        floor: 1,
-        pricePerNight: 200,
+        roomType: roomType || 'Standard',
+        floor: floor !== undefined ? floor : 1,
+        pricePerNight: pricePerNight !== undefined ? pricePerNight : 200,
       });
       setRooms((current) => [...current, room]);
       setMeters((current) => [...current, meter]);
@@ -223,6 +228,18 @@ export const App: React.FC = () => {
       return room;
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not create room');
+      throw error;
+    }
+  };
+
+  const handleUpdateRoom = async (roomId: number, payload: RoomUpdatePayload) => {
+    try {
+      const updated = await updateBackendRoom(roomId, payload);
+      setRooms((current) => current.map((r) => (r.id === roomId ? updated : r)));
+      showToast(`Room ${updated.roomNumber} updated successfully`);
+      return updated;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update room');
       throw error;
     }
   };
@@ -397,6 +414,7 @@ export const App: React.FC = () => {
                 onUpdateUser={handleUpdateUser}
                 onConnectEmail={handleConnectEmail}
                 onSendTestEmail={handleSendTestEmail}
+                onUpdateRoom={handleUpdateRoom}
               />
             )}
 

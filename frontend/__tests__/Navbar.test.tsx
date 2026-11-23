@@ -11,7 +11,7 @@ describe('Navbar Component Tests', () => {
     role: 'ADMIN',
     email: 'alex@hotelmanager.com',
     token: 'fake-jwt-token-xyz',
-    hotelId: null,
+    hotelId: undefined,
   };
 
   it('renders brand name and enterprise tag', () => {

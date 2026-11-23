@@ -133,6 +133,14 @@ export interface RoomCreatePayload {
   pricePerNight: number;
 }
 
+export interface RoomUpdatePayload {
+  roomNumber?: number;
+  status?: RoomStatus;
+  roomType?: RoomType | string;
+  floor?: number;
+  pricePerNight?: number;
+}
+
 export interface BookingReservation {
   id: string;
   roomId: number;
